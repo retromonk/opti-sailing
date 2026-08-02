@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Optimist — Milestone 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sea:    #1d7f9c;
+    --seadeep:#14607a;
+    --foam:   #dff4f8;
+    --hull:   #fbf4e2;
+    --hullsh: #d9c9a4;
+    --ink:    #10333f;
+    --buoy:   #f2683a;
+    --vest:   #ffc63d;
+    --port:   #e04a45;
+    --stbd:   #3fb877;
+    --sun:    #ffd66b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--sea);overflow:hidden;
+    font-family:Fredoka,-apple-system,"Segoe UI",sans-serif;color:#fff;
+    -webkit-font-smoothing:antialiased;user-select:none}
+  canvas{display:block}
+  #sea{width:100vw;height:100vh;touch-action:none}
+
+  .panel{position:fixed;background:rgba(16,51,63,.72);
+    border:2px solid rgba(255,255,255,.16);border-radius:14px;
+    backdrop-filter:blur(7px);padding:10px 13px;
+    box-shadow:0 6px 0 rgba(6,28,36,.35)}
+  .label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.55);font-weight:500}
+  .num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:19px;line-height:1.15}
+  .num.small{font-size:14px}
+
+  #instruments{left:14px;bottom:14px;display:grid;
+    grid-template-columns:repeat(3,minmax(56px,auto));gap:9px 17px}
+
+  #coach{left:50%;top:14px;transform:translateX(-50%);text-align:center;
+    font-size:18px;font-weight:500;padding:9px 20px;white-space:nowrap;
+    transition:color .2s;border-radius:999px}
+
+  #course{right:14px;top:14px;text-align:right;min-width:142px}
+  #course .row{display:flex;justify-content:space-between;gap:14px;
+    align-items:baseline;margin-top:4px}
+
+  #gauges{position:fixed;right:14px;bottom:14px;display:flex;gap:12px;align-items:flex-end}
+  #gauges canvas{display:block;border-radius:9px;background:#0c2732}
+  #gauges .label{margin:7px 2px 0;text-align:center}
+
+  #keys,#padHint{left:14px;top:14px;font-size:12.5px;line-height:1.7;
+    letter-spacing:.02em;max-width:196px}
+  #padHint{top:auto;bottom:118px}
+  #keys b,#padHint b{font-family:"IBM Plex Mono",monospace;font-size:11px;
+    background:rgba(255,255,255,.15);padding:1px 6px;border-radius:5px;font-weight:500}
+  .hd{color:var(--sun);letter-spacing:.15em;font-size:10px;
+    text-transform:uppercase;margin-bottom:6px}
+  #padHint .live{color:var(--stbd)}
+
+  .hidden{display:none}
+
+  #windPanel{right:14px;top:126px;width:190px}
+  #windPanel .row{display:flex;justify-content:space-between;margin-bottom:6px}
+  #windPanel b{font-family:"IBM Plex Mono",monospace;color:#fff;font-weight:500}
+  #wTrace{display:block;border-radius:7px}
+  #wShift{font-size:13px;text-align:center;margin-top:6px;letter-spacing:.06em}
+
+  #penBadge{display:none;position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:20;
+    background:var(--port);color:#fff;font-weight:600;font-size:14px;letter-spacing:.04em;
+    padding:8px 18px;border-radius:999px;border:2px solid var(--ink);white-space:nowrap;
+    box-shadow:0 4px 0 rgba(6,28,36,.4)}
+  #results.hidden{display:none}
+  #results{left:50%;top:50%;transform:translate(-50%,-50%);min-width:230px;z-index:40;text-align:left}
+  #results .rr{display:flex;justify-content:space-between;gap:18px;align-items:baseline;margin-top:6px;
+    font-size:14px}
+  #results .rr .t{font-family:"IBM Plex Mono",monospace}
+  #results .rr.me{color:var(--sun);font-weight:600}
+  #err{display:none;position:fixed;left:0;right:0;top:0;z-index:99;
+    background:#e04a45;color:#fff;font-family:ui-monospace,monospace;font-size:13px;
+    padding:10px 14px;line-height:1.4}
+
+  /* ============ dash ============ */
+  #dash{position:fixed;left:14px;bottom:14px;display:flex;gap:12px;align-items:flex-end}
+  #instruments{position:static}
+  #miniMap{display:block;border-radius:8px}
+  .bar{position:relative;width:64px;height:5px;margin-top:5px;border-radius:3px;
+    background:rgba(255,255,255,.14);overflow:hidden}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:#3fb877}
+  .bar .tick{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.8);left:0}
+
+  /* ============ setup screen ============ */
+  #setup{position:fixed;inset:0;z-index:60;display:flex;align-items:center;
+    justify-content:center;padding:24px;background:rgba(10,42,54,.86);backdrop-filter:blur(9px)}
+  /* an ID beats a class, so this rule has to be at least as specific as #setup */
+  #setup.hidden{display:none}
+  #setupCard{max-width:660px;width:100%;text-align:center}
+  #setupCard h1{font-size:27px;font-weight:600;margin:0 0 3px}
+  #setupCard .sub{color:rgba(255,255,255,.55);font-size:13px;margin:0 0 16px}
+  #windList{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+  .wcard{flex:1 1 105px;max-width:125px;background:rgba(16,51,63,.65);cursor:pointer;
+    border:2px solid rgba(255,255,255,.18);border-radius:15px;padding:11px 8px;
+    transition:transform .12s,border-color .12s,background .12s}
+  .wcard:hover{transform:translateY(-3px)}
+  .wcard.sel{background:var(--sun);border-color:var(--ink);color:var(--ink);transform:translateY(-3px)}
+  .wcard .nm{font-size:14px;font-weight:600}
+  .wcard .kn{font-family:"IBM Plex Mono",monospace;font-size:21px;margin:2px 0}
+  .wcard .tp{font-size:10.5px;opacity:.7;line-height:1.35}
+  .wcard .wv{font-size:12px;letter-spacing:2px;margin-top:3px;opacity:.65}
+  #modeList,#courseList,#shiftList{display:flex;gap:8px;justify-content:center;margin-top:4px}
+  .pill{cursor:pointer;font-size:13px;font-weight:500;padding:7px 16px;border-radius:999px;
+    background:rgba(16,51,63,.65);border:2px solid rgba(255,255,255,.18);transition:all .12s}
+  .pill.sel{background:var(--sun);color:var(--ink);border-color:var(--ink)}
+  #windNote{min-height:34px;font-size:14px;color:rgba(255,255,255,.8);margin:14px 0 4px}
+  #setup .btns{display:flex;gap:10px;justify-content:center;margin-top:6px}
+  #setup button{font-family:Fredoka,sans-serif;font-weight:600;font-size:16px;color:var(--ink);
+    background:var(--sun);border:3px solid var(--ink);border-radius:16px;padding:11px 26px;
+    cursor:pointer;box-shadow:0 5px 0 rgba(6,28,36,.45)}
+  #setup button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3);
+    box-shadow:none;font-weight:500;font-size:14px;padding:11px 18px}
+  #setup button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
+  #course{cursor:pointer}
+  #course .tap{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.1em;margin-top:5px}
+
+  /* ============ touch controls ============ */
+  #touch,#rotate{display:none}
+  .pad{position:fixed;background:rgba(16,51,63,.6);border:2px solid rgba(255,255,255,.2);
+    border-radius:18px;backdrop-filter:blur(6px);touch-action:none}
+  .pad .cap{position:absolute;font-size:9px;letter-spacing:.16em;
+    color:rgba(255,255,255,.5);pointer-events:none}
+
+  #tiller{left:calc(14px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));
+    width:190px;height:86px}
+  #tiller .cap{bottom:5px;left:50%;transform:translateX(-50%)}
+  #tillerKnob{position:absolute;top:50%;left:50%;width:52px;height:52px;margin:-26px 0 0 -26px;
+    border-radius:50%;background:var(--sun);border:3px solid var(--ink);
+    box-shadow:0 4px 0 rgba(6,28,36,.4)}
+  #tillerRail{position:absolute;top:50%;left:16px;right:16px;height:4px;margin-top:-2px;
+    background:rgba(255,255,255,.16);border-radius:2px}
+
+  #sheet{right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));
+    width:74px;height:168px;overflow:hidden}
+  #sheetFill{position:absolute;left:0;right:0;top:0;background:rgba(255,214,107,.18)}
+  #sheetKnob{position:absolute;left:6px;right:6px;height:34px;margin-top:-17px;border-radius:11px;
+    background:var(--sail,#fffaf0);background:#fffaf0;border:3px solid var(--ink);
+    box-shadow:0 3px 0 rgba(6,28,36,.4)}
+  #sheet .t{position:absolute;top:6px;left:50%;transform:translateX(-50%)}
+  #sheet .b{position:absolute;bottom:6px;left:50%;transform:translateX(-50%)}
+  #sheet b{font-size:10px;letter-spacing:.14em;color:rgba(255,255,255,.55);
+    font-family:Fredoka,sans-serif;font-weight:500;pointer-events:none}
+
+  #btns{position:fixed;right:calc(100px + env(safe-area-inset-right));
+    bottom:calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+  #btns button{font-family:Fredoka,sans-serif;font-weight:500;font-size:12px;letter-spacing:.08em;
+    color:#fff;background:rgba(16,51,63,.6);border:2px solid rgba(255,255,255,.2);
+    border-radius:14px;padding:9px 12px;min-width:74px;touch-action:none;
+    backdrop-filter:blur(6px);box-shadow:0 4px 0 rgba(6,28,36,.35)}
+  #btns button.on{background:var(--sun);color:var(--ink);border-color:var(--ink);
+    box-shadow:0 2px 0 rgba(6,28,36,.4);transform:translateY(2px)}
+  #bHike{font-size:14px !important;padding:13px 12px !important}
+
+  #rotate{position:fixed;inset:0;background:var(--seadeep);z-index:50;
+    align-items:center;justify-content:center;text-align:center;font-size:20px;padding:40px}
+
+  @media (pointer:coarse){
+    #keys,#padHint,#windPanel{display:none}
+    #touch{display:block}
+    #gauges{right:calc(10px + env(safe-area-inset-right));top:calc(10px + env(safe-area-inset-top));
+      bottom:auto;gap:8px}
+    #gauges .panel:first-child{display:none}
+    #gauges .label{font-size:9px;margin-top:5px}
+    #course{left:calc(10px + env(safe-area-inset-left));right:auto;
+      top:calc(10px + env(safe-area-inset-top));text-align:left;min-width:0;padding:7px 10px}
+    #course .num{font-size:16px}
+    #coach{font-size:14px;padding:6px 15px;top:calc(10px + env(safe-area-inset-top))}
+    #dash{left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));gap:8px}
+    #instruments{grid-template-columns:repeat(3,auto);gap:2px 13px;padding:6px 11px}
+    #instruments > div:nth-child(n+4){display:none}
+    #instruments .num{font-size:16px}
+    #windList{gap:7px} .wcard{flex:1 1 88px;padding:8px 6px}
+    .wcard .kn{font-size:18px} #setupCard h1{font-size:22px}
+  }
+  @media (pointer:coarse) and (orientation:portrait){
+    #rotate{display:flex} #touch,#gauges,#dash,#coach{display:none}
+  }
+  @media (max-width:900px) and (pointer:fine){ #keys,#padHint,#gauges{display:none} }
+</style>
+</head>
+<body>
+
+<canvas id="sea"></canvas>
+
+<div class="panel" id="keys">
+  <div class="hd">Keys</div>
+  <b>A</b> <b>D</b> steer &nbsp; <b>W</b> <b>S</b> sheet<br>
+  <b>Q</b> <b>E</b> daggerboard<br>
+  <b>Shift</b> hike out &nbsp; <b>Z</b> lean in<br>
+  <b>L</b> laylines &nbsp; <b>H</b> coach &nbsp; <b>R</b> restart<br>
+  <b>M</b> change the wind
+</div>
+
+<div class="panel hidden" id="padHint">
+  <div class="hd">Controller <span class="live">ready</span></div>
+  <b>L stick</b> tiller &nbsp; <b>R2</b>/<b>L2</b> sheet<br>
+  <b>R stick</b> hike in / out<br>
+  <b>D-pad</b> daggerboard<br>
+  <b>△</b> laylines &nbsp; <b>□</b> coach &nbsp; <b>Options</b> restart
+</div>
+
+<div id="penBadge"></div>
+<div class="panel" id="coach">Sheet in and bear away to get moving</div>
+
+<div class="panel" id="course">
+  <div class="label" id="clockLabel">Start in</div>
+  <div class="num" id="tElapsed">1:00.0</div>
+  <div class="row"><span class="label">Position</span><span class="num small" id="posn">— / —</span></div>
+  <div class="row"><span class="label">Best</span><span class="num small" id="tBest">—</span></div>
+  <div class="row"><span class="label">Leg</span><span class="num small" id="legName">to mark</span></div>
+  <div class="tap">TAP TO CHANGE WIND</div>
+</div>
+
+<div class="panel" id="windPanel">
+  <div class="row"><span class="label">Wind <b id="wDir">000</b>°</span><span class="label"><b id="wSpd">9.0</b> kn</span></div>
+  <canvas id="wTrace" width="164" height="54"></canvas>
+  <div class="num small" id="wShift">—</div>
+</div>
+
+<div class="panel hidden" id="results">
+  <div class="hd">Finish</div>
+  <div id="resultRows"></div>
+</div>
+
+<div id="setup">
+  <div id="setupCard">
+    <h1>Pick your day</h1>
+    <p class="sub">More wind means more speed, bigger waves, and a much easier capsize.</p>
+    <div id="windList"></div>
+    <p id="windNote"></p>
+    <div id="modeList"></div>
+    <div id="courseList" style="margin-top:10px"></div>
+    <p id="courseNote" class="sub" style="margin:8px 0 12px"></p>
+    <div id="shiftList"></div>
+    <p id="shiftNote" class="sub" style="margin:8px 0 0"></p>
+    <div class="btns">
+      <button id="goBtn">Go sailing</button>
+      <button id="restartBtn" class="ghost">Restart run</button>
+    </div>
+  </div>
+</div>
+
+<div id="dash">
+  <div class="panel" style="position:static;padding:7px">
+    <canvas id="miniMap" width="88" height="124"></canvas>
+  </div>
+  <div class="panel" id="instruments">
+    <div><div class="label">Speed kn</div><div class="num" id="iSpd">0.0</div>
+      <div class="bar"><div class="fill" id="spdFill"></div><div class="tick" id="spdTick"></div></div></div>
+    <div><div class="label">VMG kn</div><div class="num" id="iVmg">0.0</div></div>
+    <div><div class="label">Heel °</div><div class="num" id="iHeel">0</div></div>
+    <div><div class="label">True WA</div><div class="num" id="iTwa">0</div></div>
+    <div><div class="label">To mark m</div><div class="num" id="iDist">0</div></div>
+    <div><div class="label">Board %</div><div class="num" id="iBrd">100</div></div>
+  </div>
+</div>
+
+<div id="gauges">
+  <div class="panel" style="position:static">
+    <canvas id="trimView" width="180" height="132"></canvas>
+    <div class="label" id="trimLabel">From astern</div>
+  </div>
+  <div class="panel" style="position:static">
+    <canvas id="detail" width="200" height="132"></canvas>
+    <div class="label" id="detailLabel">Telltales</div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="pad" id="tiller">
+    <div id="tillerRail"></div><div id="tillerKnob"></div><span class="cap">TILLER</span>
+  </div>
+  <div class="pad" id="sheet">
+    <div id="sheetFill"></div><div id="sheetKnob"></div>
+    <b class="t">IN</b><b class="b">OUT</b>
+  </div>
+  <div id="btns">
+    <button id="bUp">BOARD ▲</button>
+    <button id="bDown">BOARD ▼</button>
+    <button id="bHike">HIKE</button>
+  </div>
+</div>
+
+<div id="rotate">Turn your phone sideways to sail</div>
+
+<div id="err"></div>
+
+<script>
+/* If anything throws, say so on screen instead of leaving a blank page.
+   Phones have no console, so this is the only way to see what broke. */
+addEventListener('error', e=>{
+  const b=document.getElementById('err');
+  if(!b) return;
+  b.style.display='block';
+  b.textContent = (e.message||'Script error') + (e.lineno ? '  — line '+e.lineno : '');
+});
+</script>
+
+<script>
+/* ============================================================
+   OPTIMIST — Milestone 2
+   Now with heel, pitch, hiking, capsizes, and a cartoon coat
+   of paint. Tunable numbers all live in TUNING.
+   ============================================================ */
+
+const TUNING = {
+  trueWindKn:      9,
+  windFromDeg:     0,
+  windOscillDeg:   6,
+  windOscillSec:   38,
+  shiftGain:       1,      // how far the wind swings overall
+  puffCount:       16,     // patches of more and less wind drifting through
+  puffStrength:    0.30,   // as a fraction of the true wind speed
+  puffBendDeg:     7,      // puffs arrive with a bend in them
+
+  maxBoatKn:       4.2,
+  accelPerSec:     0.55,
+  decelPerSec:     0.95,
+  turnRateDeg:     85,
+  rudderDrag:      0.18,
+
+  sheetSpeedDeg:   70,
+  boardSpeed:      0.9,
+  bestAlphaDeg:    17,
+  stallAlphaDeg:   27,
+
+  leewayMax:       0.42,
+  leewayMin:       0.03,
+  boardDragGain:   0.09,
+  gybeLoss:        0.30,
+
+  /* --- balance --- */
+  heelGainDeg:     34,    // how hard the sail tries to push her over
+  hikeGainDeg:     34,    // how much righting a fully hiked sailor gives
+  heelStiff:       7.0,   // springiness of the roll
+  heelDamp:        3.0,
+  capsizeDeg:      44,    // past this she goes over
+  flatBonus:       0.30,  // speed lost when sailing badly heeled
+  deathRollGain:   16,    // windward rolling when running by the lee
+  recoverSec:      3.5,
+
+  /* --- pitch --- */
+  pitchStiff:      9.0,
+  pitchDamp:       3.4,
+  pitchAccelGain:  22,    // stern squats as she accelerates
+  noseDiveDeg:     13,    // bow-down angle where she starts to plough
+
+  /* --- sea state --- */
+  waveLenM:        11,
+  wavePeriodSec:   3.1,
+  waveSteepDeg:    9,
+
+  markRadiusM:     6,
+  windwardLegM:    150,
+  pxPerM:          11
+};
+
+const KN = 0.5144, D2R = Math.PI/180, R2D = 180/Math.PI;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t;
+const norm = a => { while(a>Math.PI)a-=2*Math.PI; while(a<-Math.PI)a+=2*Math.PI; return a; };
+const vecOf = a => ({x:Math.sin(a), y:-Math.cos(a)});
+const angOf = (x,y) => Math.atan2(x,-y);
+
+/* boat speed as a fraction of wind speed, every 15° of true wind angle */
+const POLAR = [0,0,0.20,0.42,0.50,0.55,0.56,0.55,0.52,0.47,0.40,0.33,0.30];
+function polarSpeed(twaDeg, twsKn){
+  const t = clamp(Math.abs(twaDeg),0,180)/15, i = Math.min(Math.floor(t),11);
+  return Math.min(lerp(POLAR[i],POLAR[i+1],t-i)*twsKn, TUNING.maxBoatKn);
+}
+
+/* a sail is a wing upwind and a parachute downwind — take whichever is stronger */
+function sailPower(a){
+  a = Math.abs(a);
+  let lift;
+  if      (a<=2)  lift=0;
+  else if (a<=10) lift=lerp(0,0.80,(a-2)/8);
+  else if (a<=TUNING.bestAlphaDeg)  lift=lerp(0.80,1,(a-10)/(TUNING.bestAlphaDeg-10));
+  else if (a<=TUNING.stallAlphaDeg) lift=1;
+  else if (a<=45) lift=lerp(1,0.55,(a-TUNING.stallAlphaDeg)/(45-TUNING.stallAlphaDeg));
+  else            lift=0.55;
+  return Math.max(lift, 0.90*Math.max(0, Math.cos((a-90)*D2R)));
+}
+function flowState(alpha, awa){
+  const a = Math.abs(alpha);
+  if (Math.abs(awa) > 145) return "running";
+  if (a<=4) return "luffing";
+  if (a<=9) return "soft";
+  if (a<=TUNING.stallAlphaDeg+3) return "attached";
+  return "stalled";
+}
+
+/* waves march downwind. The same function drives the water you see,
+   the way she pitches, and the way she rolls. */
+function waveAt(x,y,t){
+  const w = vecOf(windBase.dir + Math.PI);   // waves follow the settled breeze, not each puff
+  const along = (x*w.x + y*w.y) / (TUNING.waveLenM*TUNING.pxPerM);
+  return Math.sin(along*2*Math.PI - t*2*Math.PI/TUNING.wavePeriodSec);
+}
+
+/* ============================================================ */
+/* ============================================================
+   THE WIND FIELD
+   Three things happening at once:
+     1. the whole breeze swings back and forth (oscillating shifts)
+     2. patches of more and less wind drift through it (puffs and lulls)
+     3. each patch arrives with a slight bend of its own
+   Sampling all of that at the boat gives the wind she actually feels.
+   ============================================================ */
+let windBase={dir:0};      // the underlying breeze, before any puffs
+let windMean=0;            // slow average, the baseline a shift is measured against
+let shiftDeg=0;            // + means the wind has swung clockwise of the mean
+const PUFFS=[];
+
+function newPuff(anywhere){
+  const w=vecOf(windBase.dir+Math.PI);          // the way the wind blows
+  const along = anywhere ? (Math.random()*2-1)*1100 : -1000-Math.random()*300;
+  const across = (Math.random()*2-1)*900;
+  return {
+    x: boat.x + w.x*along - w.y*across,
+    y: boat.y + w.y*along + w.x*across,
+    r: (26+Math.random()*46)*TUNING.pxPerM,
+    dv: (Math.random()<0.55?1:-1)*(0.4+Math.random()*0.6)*TUNING.puffStrength,
+    dd: (Math.random()*2-1)*TUNING.puffBendDeg*D2R*TUNING.shiftGain
+  };
+}
+function seedPuffs(){
+  PUFFS.length=0;
+  for(let i=0;i<TUNING.puffCount;i++) PUFFS.push(newPuff(true));
+}
+function updatePuffs(dt){
+  const w=vecOf(windBase.dir+Math.PI);
+  const drift = TUNING.trueWindKn*0.55*KN*TUNING.pxPerM*dt;   // puffs travel downwind
+  for(let i=0;i<PUFFS.length;i++){
+    const p=PUFFS[i];
+    p.x+=w.x*drift; p.y+=w.y*drift;
+    // once a patch is well downwind of the boat, recycle it upwind
+    if((p.x-boat.x)*w.x+(p.y-boat.y)*w.y > 1200) PUFFS[i]=newPuff(false);
+  }
+}
+/* Weed, foam and old crab-pot floats, anchored in the water. Uniform texture
+   gives you nothing to judge motion by — distinct objects sliding past do. */
+const SCENERY=[];
+function seedScenery(){
+  SCENERY.length=0;
+  const P=TUNING.pxPerM, legPx=TUNING.windwardLegM*P;
+  for(let i=0;i<110;i++){
+    SCENERY.push({
+      x:(Math.random()*2-1)*80*P,
+      y:(Math.random()*(legPx+90*P))-legPx-40*P,
+      k:Math.random()<0.5?'weed':Math.random()<0.7?'foam':'float',
+      r:Math.random()*Math.PI*2, s:0.7+Math.random()*0.7
+    });
+  }
+}
+
+/* Where she has actually been. Compare it with where the bow is pointing
+   and you can see your own leeway. */
+const TRACK=[]; let trackT=0;
+
+function windAt(x,y){
+  let dir=windBase.dir, spd=TUNING.trueWindKn;
+  for(const p of PUFFS){
+    const d=Math.hypot(x-p.x,y-p.y);
+    if(d>=p.r) continue;
+    const f=Math.cos(d/p.r*Math.PI/2)**2;       // soft edges, strongest in the middle
+    spd += p.dv*TUNING.trueWindKn*f;
+    dir += p.dd*f;
+  }
+  return {dir, spd:Math.max(0.6,spd)};
+}
+
+const boat = { x:0,y:0,hdg:0,spd:0,sheet:12*D2R,board:1,rudder:0,
+               heel:0,heelV:0,pitch:0,pitchV:0,crew:0.35,
+               capsized:false,recover:0,spray:0 };
+/* ============================================================
+   REGATTA COURSES
+   Laid out in wind-relative coordinates: u is distance upwind of
+   the start line, v is distance across it (+ is to the right when
+   you are looking upwind). The whole thing is then rotated to
+   wherever the breeze actually is, so the beat is always a beat.
+   ============================================================ */
+const M =(u,v,name)=>({u,v,name,type:'mark'});
+const GT=(u,name,half)=>({u,v:0,name,type:'gate',half});
+const LN=(u,v,name,half)=>({u,v,name,type:'line',half});
+
+const COURSES=[
+  { name:'Windward–Leeward', short:'W/L',
+    note:'Straight up, straight back, with an offset mark at the top. The bread and butter of club racing.',
+    build:L=>[ M(L,0,'1'), M(L-10,-14,'1a'), GT(12,'GATE',13), LN(0,0,'FINISH',22) ] },
+  { name:'W/L twice round', short:'W/L ×2',
+    note:'The same course sailed twice. Long enough that reading the shifts really decides it.',
+    build:L=>[ M(L,0,'1'), M(L-10,-14,'1a'), GT(12,'GATE',13),
+               M(L,0,'1'), M(L-10,-14,'1a'), GT(12,'GATE',13), LN(0,0,'FINISH',22) ] },
+  { name:'Triangle', short:'Triangle',
+    note:'A beat, then two reaches around the wing mark. The classic Olympic triangle — gybe at mark 2.',
+    build:L=>[ M(L,0,'1'), M(L*0.5,-L*0.52,'2'), GT(12,'3',13), LN(0,0,'FINISH',22) ] },
+  { name:'Triangle then W/L', short:'Tri + W/L',
+    note:'A triangle lap followed by a windward-leeward lap. What most Optimist regattas actually sail.',
+    build:L=>[ M(L,0,'1'), M(L*0.5,-L*0.52,'2'), M(12,0,'3'),
+               M(L,0,'1'), GT(12,'3',13), LN(0,0,'FINISH',22) ] },
+  { name:'Trapezoid', short:'Trapezoid',
+    note:'The big-regatta layout, so several fleets can race at once: up, offset, a long reach across, then the outer loop to a reaching finish.',
+    build:L=>[ M(L,0,'1'), M(L-10,-14,'1a'), M(L*0.52,-L*0.6,'2'),
+               M(10,-L*0.6,'3'), LN(6,-L*0.3,'FINISH',20) ] }
+];
+let coursePick=0;
+let course=[], wp=0;
+let clock=0, running=false, best=null, simTime=0;
+
+function buildCourse(){
+  const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
+  const U=vecOf(dir);                       // straight upwind
+  const R={x:Math.cos(dir), y:Math.sin(dir)};// to the right, looking upwind
+  course = COURSES[coursePick].build(TUNING.windwardLegM).map(k=>{
+    const o={...k, x:(U.x*k.u+R.x*k.v)*P, y:(U.y*k.u+R.y*k.v)*P};
+    if(k.type!=='mark'){                     // lines and gates get two buoys
+      const hp=(k.half||20)*P;
+      o.a={x:o.x-R.x*hp, y:o.y-R.y*hp};
+      o.b={x:o.x+R.x*hp, y:o.y+R.y*hp};
+    }
+    return o;
+  });
+  wp=0;
+  const hp=22*P;
+  startLine={ x:0, y:0, type:'line', name:'START',
+              a:{x:-R.x*hp,y:-R.y*hp}, b:{x:R.x*hp,y:R.y*hp} };
+  return {U,R,P};
+}
+
+/* ============================================================
+   THE RACE: a starting sequence, three rivals, and penalty turns
+   ============================================================ */
+let raceMode=true, phase='pre', countdown=0, raceTime=0;
+const START_SEC=60;
+let startLine=null;
+
+let penalty='', lastResult=null;
+let pen=0, penTurn=0, penDir=0, penPrevHdg=0, ocs=false, started=false, hitCool=0;
+
+const RIVAL_CFG=[
+  { n:'Mia',   c:'#e04a45', s:0.99, tactics:1.0 },
+  { n:'Diego', c:'#4a8fe0', s:0.95, tactics:0.7 },
+  { n:'Ruby',  c:'#8fd94a', s:0.91, tactics:0.4 }
+];
+const RIVALS=[];
+
+function makeRivals(){
+  RIVALS.length=0;
+  if(!raceMode) return;
+  const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
+  const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
+  RIVAL_CFG.forEach((k,i)=>{
+    const v=(i-1)*13 + 7;                       // spread along the line
+    RIVALS.push({...k, lane:v,
+      x:(U.x*-16 + R.x*v)*P, y:(U.y*-16 + R.y*v)*P,
+      hdg:norm(dir-50*D2R), spd:0.8, wp:0, tack:1, cool:0, sides:{},
+      heel:0, fin:null, prevTwa:1});
+  });
+}
+
+/* Which side of a line you are on. Crossing is a change of sign. */
+function lineSide(k,x,y){
+  return Math.sign((k.b.x-k.a.x)*(y-k.a.y)-(k.b.y-k.a.y)*(x-k.a.x));
+}
+function reachedBy(b,k,i){
+  if(k.type==='mark') return Math.hypot(b.x-k.x,b.y-k.y) < TUNING.markRadiusM*TUNING.pxPerM;
+  const dx=k.b.x-k.a.x, dy=k.b.y-k.a.y;
+  const t=((b.x-k.a.x)*dx+(b.y-k.a.y)*dy)/(dx*dx+dy*dy);
+  const side=lineSide(k,b.x,b.y), prev=b.sides[i];
+  b.sides[i]=side;
+  return prev!==undefined && prev!==0 && side!==0 && side!==prev && t>0 && t<1;
+}
+
+/* ---- how a rival decides where to point ----
+   Upwind she sails close-hauled and tacks on the laylines, and the
+   sharper ones also tack when the wind heads them. Downwind she picks
+   the gybe that aims nearer the mark. Everywhere else, straight at it. */
+function aiHeading(b,goal,w){
+  const brg=angOf(goal.x-b.x, goal.y-b.y);
+  const off=norm(brg-w.dir)*R2D;            // where the mark sits either side of the wind
+  if(Math.abs(off)<44){                     // it is a beat
+    if(b.tack>0 && off> 43) b.tack=-1;      // on the layline, tack for the mark
+    else if(b.tack<0 && off< -43) b.tack= 1;
+    else {
+      const lift=norm(w.dir-windMean)*R2D*b.tack;
+      if(b.cool<=0 && lift < -4.5){ b.tack*=-1; b.cool=7; }   // tack on the header
+    }
+    return norm(w.dir - b.tack*44*D2R);
+  }
+  if(Math.abs(off)>150){                    // dead downwind, so pick a gybe
+    const g1=norm(w.dir+Math.PI-28*D2R), g2=norm(w.dir+Math.PI+28*D2R);
+    const better = Math.abs(norm(g1-brg))<Math.abs(norm(g2-brg));
+    b.tack = better?1:-1;
+    return better?g1:g2;
+  }
+  return brg;
+}
+
+function stepRival(b,dt){
+  b.cool-=dt;
+  const w=windAt(b.x,b.y);
+  let want;
+  if(phase==='pre'){
+    // hover below the line and try to be there on the gun
+    const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
+    const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
+    const hold={x:(U.x*-7+R.x*b.lane)*P, y:(U.y*-7+R.y*b.lane)*P};
+    const far=Math.hypot(hold.x-b.x,hold.y-b.y);
+    want = far>6*P ? angOf(hold.x-b.x,hold.y-b.y) : norm(dir-90*D2R);
+  } else {
+    const goal=course[b.wp];
+    if(!goal){ want=b.hdg; } else want=aiHeading(b,goal,w);
+  }
+
+  // turn toward it, with no real steering when she is stopped
+  const err=norm(want-b.hdg);
+  const rate=(75*D2R)*clamp(0.25+b.spd/1.2,0,1)*dt;
+  b.hdg=norm(b.hdg+clamp(err,-rate,rate));
+
+  const twa=norm(w.dir-b.hdg);
+  if(Math.sign(twa)!==Math.sign(b.prevTwa))
+    b.spd *= Math.abs(b.prevTwa)*R2D>120 ? 0.72 : 0.80;   // gybes cost more than tacks
+  b.prevTwa=twa||b.prevTwa;
+
+  let tgt=polarSpeed(twa*R2D,w.spd)*b.s;
+  if(phase==='pre') tgt=Math.min(tgt,1.3);                 // no charging the line early
+  if(Math.abs(err)>0.5) tgt*=0.85;
+  b.spd += (tgt-b.spd)*(1-Math.exp(-(tgt>b.spd?0.55:0.95)*dt/0.35));
+  b.heel = lerp(b.heel, clamp(Math.sin(Math.abs(twa))*w.spd/22,0,0.5)*-Math.sign(twa||1), 1-Math.exp(-4*dt));
+
+  const k=KN*TUNING.pxPerM*dt, hv=vecOf(b.hdg);
+  b.x+=hv.x*b.spd*k; b.y+=hv.y*b.spd*k;
+
+  if(phase==='racing' && b.fin===null){
+    if(!b.started){ if(reachedBy(b,startLine,'start')) b.started=true; }
+    const g=course[b.wp];
+    if(g && reachedBy(b,g,b.wp)){
+      b.wp++;
+      if(b.wp>=course.length) b.fin=raceTime;
+    }
+  }
+}
+
+/* Marks you round by getting close enough. Gates and lines you have to
+   actually cross, between the two buoys. */
+function reached(k){
+  if(k.type==='mark')
+    return Math.hypot(boat.x-k.x, boat.y-k.y) < TUNING.markRadiusM*TUNING.pxPerM;
+  const dx=k.b.x-k.a.x, dy=k.b.y-k.a.y;
+  const t=((boat.x-k.a.x)*dx+(boat.y-k.a.y)*dy)/(dx*dx+dy*dy);
+  const side=Math.sign(dx*(boat.y-k.a.y)-dy*(boat.x-k.a.x));
+  const prev=k._s; k._s=side;
+  return prev!==undefined && prev!==0 && side!==0 && side!==prev && t>0 && t<1;
+}
+let showLaylines=true, showCoach=true;
+let wind={fromDir:0,spdKn:0};
+let telltale={alpha:0,state:"luffing",awa:0,sheetSign:1};
+const keys={};
+const trace=[];              // recent wind shift history, for the trace gauge
+let traceT=0;
+
+function resetRun(){
+  const {U,R,P}=buildCourse();
+  const sx=(U.x*-18 + R.x*-7)*P, sy=(U.y*-18 + R.y*-7)*P;   // below the start line
+  const dir=TUNING.windFromDeg*D2R;
+  Object.assign(boat,{x:sx,y:sy,hdg:norm(dir-50*D2R),spd:1.2,sheet:20*D2R,board:1,
+    heel:0,heelV:0,pitch:0,pitchV:0,capsized:false,recover:0,spray:0});
+  clock=0; running=false;
+  phase = raceMode ? 'pre' : 'racing';
+  countdown = raceMode ? START_SEC : 0;
+  raceTime=0; pen=0; penTurn=0; penDir=0; penPrevHdg=boat.hdg;
+  ocs=false; started=!raceMode; hitCool=0;
+  makeRivals();
+  windBase.dir=dir; windMean=dir; shiftDeg=0;
+  wind.fromDir=dir; wind.spdKn=TUNING.trueWindKn;
+  trace.length=0; TRACK.length=0; seedPuffs(); seedScenery();
+  course.forEach(k=>{ if(k.type!=='mark'){ k._s=undefined; reached(k); } });  // prime the line crossings
+  startLine._s=undefined; reached(startLine); startLine._s0=startLine._s;
+  RIVALS.forEach(b=>{ b.sides={}; b.started=false; reachedBy(b,startLine,'start'); });
+}
+resetRun();
+
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase(); keys[k]=true;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+  if(k==='r') resetRun();
+  if(k==='l') showLaylines=!showLaylines;
+  if(k==='h'){ showCoach=!showCoach; coachEl.classList.toggle('hidden',!showCoach); }
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+const down=(...ks)=>ks.some(k=>keys[k]);
+
+/* ============================================================
+   WIND PRESETS
+   Picking a day changes four things at once: how fast she can
+   go, how big the sea is, how shifty it is, and how hard the
+   sail tries to put her over.
+   ============================================================ */
+const WINDS = [
+  { name:'Drifter', kn:4,  note:'Glassy and slow. Sit still, keep her flat, and be patient — every puff counts.' },
+  { name:'Light',   kn:7,  note:'Easy sailing. Enough to move properly, not enough to hurt you.' },
+  { name:'Breeze',  kn:10, note:'The good stuff. Full speed, real chop, and you will need to hike upwind.' },
+  { name:'Fresh',   kn:14, note:'Quick and lively. Ease in the gusts or she will lie down on you.' },
+  { name:'Heavy',   kn:18, note:'Survival conditions. Fastest day out here, and you will capsize.' }
+];
+const SHIFTS = [
+  { name:'Steady',      g:0.3, note:'the breeze barely moves' },
+  { name:'Oscillating', g:1.0, note:'swings back and forth on a rhythm you can learn' },
+  { name:'Tricky',      g:2.0, note:'big swings and hard puffs, anyone can win' }
+];
+let shiftPick = 1;
+let windPick = 2;
+
+function topSpeedFor(kn){
+  const cap = clamp(3.2 + 0.10*kn, 3.2, 5.2);
+  let best = 0;
+  for(let a=0;a<=180;a+=5) best = Math.max(best, Math.min(POLAR_RAW(a)*kn, cap));
+  return best;
+}
+const POLAR_RAW = twa => {
+  const t=clamp(Math.abs(twa),0,180)/15, i=Math.min(Math.floor(t),11);
+  return lerp(POLAR[i],POLAR[i+1],t-i);
+};
+
+function applyWind(i){
+  windPick = i;
+  const kn = WINDS[i].kn;
+  TUNING.trueWindKn   = kn;
+  TUNING.maxBoatKn    = clamp(3.2 + 0.10*kn, 3.2, 5.2);   // more wind, higher ceiling
+  TUNING.waveSteepDeg = 2.5 + kn*0.72;                    // the sea builds with the wind
+  TUNING.waveLenM     = 7 + kn*0.45;
+  TUNING.wavePeriodSec= 2.4 + kn*0.06;
+  TUNING.windOscillDeg= 3.5 + kn*0.22;                    // stronger wind shifts more
+  TUNING.shiftGain    = SHIFTS[shiftPick].g;
+  TUNING.puffStrength = 0.16 + 0.13*SHIFTS[shiftPick].g;
+  TUNING.puffBendDeg  = 5 + 3*SHIFTS[shiftPick].g;
+  best = null;                    // a time only means something in the same wind
+  resetRun();
+}
+
+/* ---------------- setup screen ---------------- */
+let paused = true;
+function buildSetup(){
+  const list=document.getElementById('windList');
+  list.innerHTML='';
+  WINDS.forEach((w,i)=>{
+    const el=document.createElement('div');
+    el.className='wcard'+(i===windPick?' sel':'');
+    el.innerHTML=`<div class="nm">${w.name}</div><div class="kn">${w.kn}</div>`+
+      `<div class="tp">knots of wind<br>tops out near ${topSpeedFor(w.kn).toFixed(1)} kn</div>`+
+      `<div class="wv">${'~'.repeat(Math.max(1,Math.round(w.kn/4)))}</div>`;
+    el.addEventListener('click',()=>{ windPick=i; buildSetup(); });
+    list.appendChild(el);
+  });
+  document.getElementById('windNote').textContent = WINDS[windPick].note;
+
+  const ml=document.getElementById('modeList');
+  ml.innerHTML='';
+  [['Race 3 rivals',true],['Practice alone',false]].forEach(([label,on])=>{
+    const el=document.createElement('div');
+    el.className='pill'+(raceMode===on?' sel':'');
+    el.textContent=label;
+    el.addEventListener('click',()=>{ raceMode=on; buildSetup(); });
+    ml.appendChild(el);
+  });
+
+  const cl=document.getElementById('courseList');
+  cl.innerHTML='';
+  COURSES.forEach((c,i)=>{
+    const el=document.createElement('div');
+    el.className='pill'+(i===coursePick?' sel':'');
+    el.textContent=c.short;
+    el.addEventListener('click',()=>{ coursePick=i; buildSetup(); });
+    cl.appendChild(el);
+  });
+  document.getElementById('courseNote').textContent = COURSES[coursePick].note;
+
+  const sl=document.getElementById('shiftList');
+  sl.innerHTML='';
+  SHIFTS.forEach((sh,i)=>{
+    const el=document.createElement('div');
+    el.className='pill'+(i===shiftPick?' sel':'');
+    el.textContent=sh.name;
+    el.addEventListener('click',()=>{ shiftPick=i; buildSetup(); });
+    sl.appendChild(el);
+  });
+  document.getElementById('shiftNote').textContent = 'Shifts: '+SHIFTS[shiftPick].note+'.';
+}
+function openSetup(){ paused=true; buildSetup(); document.getElementById('setup').classList.remove('hidden'); }
+function closeSetup(){ applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
+
+/* ---------------- touch (iPhone / iPad) ----------------
+   Left thumb works the tiller. Right thumb works the sheet:
+   slide up to trim in, down to ease, exactly like the real
+   thing runs through your hand.                            */
+const touch={steer:0, hike:false, boardUp:false, boardDown:false, sheetHeld:false};
+const isTouch = matchMedia('(pointer:coarse)').matches;
+
+function setupTouch(){
+  const tiller=document.getElementById('tiller');
+  const knob=document.getElementById('tillerKnob');
+  let tillerId=null;
+
+  const tillerMove=e=>{
+    const r=tiller.getBoundingClientRect();
+    const v=clamp((e.clientX-(r.left+r.width/2))/(r.width/2-26),-1,1);
+    touch.steer=v;
+    knob.style.transform=`translateX(${v*(r.width/2-30)}px)`;
+  };
+  tiller.addEventListener('pointerdown',e=>{
+    tillerId=e.pointerId; tiller.setPointerCapture(e.pointerId); tillerMove(e); e.preventDefault();
+  });
+  tiller.addEventListener('pointermove',e=>{ if(e.pointerId===tillerId) tillerMove(e); });
+  const tillerUp=e=>{
+    if(e.pointerId!==tillerId) return;
+    tillerId=null; touch.steer=0; knob.style.transform='translateX(0px)';
+  };
+  tiller.addEventListener('pointerup',tillerUp);
+  tiller.addEventListener('pointercancel',tillerUp);
+
+  const sheet=document.getElementById('sheet');
+  let sheetId=null;
+  const sheetMove=e=>{
+    const r=sheet.getBoundingClientRect();
+    const t=clamp((e.clientY-r.top-20)/(r.height-40),0,1);
+    boat.sheet=t*90*D2R;                     // top of the strip = sheeted right in
+    touch.sheetHeld=true;
+  };
+  sheet.addEventListener('pointerdown',e=>{
+    sheetId=e.pointerId; sheet.setPointerCapture(e.pointerId); sheetMove(e); e.preventDefault();
+  });
+  sheet.addEventListener('pointermove',e=>{ if(e.pointerId===sheetId) sheetMove(e); });
+  const sheetUp=e=>{ if(e.pointerId===sheetId){ sheetId=null; touch.sheetHeld=false; } };
+  sheet.addEventListener('pointerup',sheetUp);
+  sheet.addEventListener('pointercancel',sheetUp);
+
+  const hold=(id,key)=>{
+    const b=document.getElementById(id);
+    const on=e=>{ touch[key]=true; b.classList.add('on'); b.setPointerCapture(e.pointerId); e.preventDefault(); };
+    const off=()=>{ touch[key]=false; b.classList.remove('on'); };
+    b.addEventListener('pointerdown',on);
+    b.addEventListener('pointerup',off);
+    b.addEventListener('pointercancel',off);
+    b.addEventListener('pointerleave',off);
+  };
+  hold('bUp','boardUp'); hold('bDown','boardDown'); hold('bHike','hike');
+
+  // the timer card opens the wind menu, which doubles as a pause screen
+  document.getElementById('course').addEventListener('pointerdown',e=>{ openSetup(); e.preventDefault(); });
+
+  // stop iOS from scrolling or bouncing the page under the game
+  document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+  document.addEventListener('gesturestart',e=>e.preventDefault());
+}
+setupTouch();
+document.getElementById('goBtn').addEventListener('click',closeSetup);
+document.getElementById('restartBtn').addEventListener('click',()=>{ resetRun(); closeSetup(); });
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='m') paused ? closeSetup() : openSetup();
+  if(k==='enter' && paused) closeSetup();
+});
+buildSetup();
+
+/* keep the sheet handle in step with the boat, however it was moved */
+function syncSheetKnob(){
+  if(!isTouch) return;
+  const sheet=document.getElementById('sheet');
+  const r=sheet.getBoundingClientRect(); if(!r.height) return;
+  const t=boat.sheet/(90*D2R);
+  const y=20+t*(r.height-40);
+  document.getElementById('sheetKnob').style.top=y+'px';
+  document.getElementById('sheetFill').style.height=y+'px';
+}
+
+/* The finish board, shown for a few seconds after you cross the line. */
+function showResults(){
+  if(!lastResult) return;
+  const rows=[{n:'You',c:'#ffd66b',t:lastResult.me,me:true},
+              ...lastResult.rivals.map(r=>({...r,t:r.t}))]
+    .sort((a,b)=>(a.t===null?1e9:a.t)-(b.t===null?1e9:b.t));
+  document.getElementById('resultRows').innerHTML = rows.map((r,i)=>
+    `<div class="rr${r.me?' me':''}"><span>${i+1}. ${r.n}${
+      r.me&&lastResult.pen?' (+'+lastResult.pen*30+'s)':''}</span>`+
+    `<span class="t">${r.t===null?'DNF':fmt(r.t)}</span></div>`).join('');
+  const el=document.getElementById('results');
+  el.classList.remove('hidden');
+  clearTimeout(showResults._t);
+  showResults._t=setTimeout(()=>el.classList.add('hidden'),6000);
+}
+
+/* ---------------- gamepad ---------------- */
+const pad={on:false,steer:0,trimIn:0,ease:0,crew:0,boardUp:false,boardDown:false,prev:{}};
+function activePad(){ const l=navigator.getGamepads?navigator.getGamepads():[];
+  for(const g of l) if(g&&g.connected) return g; return null; }
+function pollPad(){
+  const g=activePad(), was=pad.on; pad.on=!!g;
+  if(was!==pad.on) padHint.classList.toggle('hidden',!pad.on);
+  if(!g){ pad.steer=pad.trimIn=pad.ease=pad.crew=0; return; }
+  const dz=v=>Math.abs(v)<0.12?0:(v-Math.sign(v)*0.12)/0.88;
+  const bv=i=>{const b=g.buttons[i];return !b?0:(typeof b.value==='number'?b.value:(b.pressed?1:0));};
+  pad.steer=dz(g.axes[0]||0);
+  pad.crew =dz(g.axes[2]||0);          // right stick: lean in or hike out
+  pad.trimIn=bv(7); pad.ease=bv(6);
+  pad.boardDown=bv(13)>0.5; pad.boardUp=bv(12)>0.5;
+  const edge=i=>{const n=bv(i)>0.5,b=pad.prev[i];pad.prev[i]=n;return n&&!b;};
+  if(edge(9)) resetRun();
+  if(edge(3)) showLaylines=!showLaylines;
+  if(edge(2)){ showCoach=!showCoach; coachEl.classList.toggle('hidden',!showCoach); }
+}
+let lastRumble=0;
+function rumble(s,w,ms){
+  const g=activePad(); if(!g||!g.vibrationActuator) return;
+  try{ g.vibrationActuator.playEffect('dual-rumble',
+       {duration:ms,strongMagnitude:s,weakMagnitude:w}); }catch(e){}
+}
+
+/* ============================================================
+   PHYSICS
+   ============================================================ */
+function step(dt){
+  simTime += dt;
+
+  // the underlying breeze swings on two overlapping rhythms, so the
+  // pattern is learnable but never quite repeats
+  const g=TUNING.shiftGain, P=TUNING.windOscillSec;
+  const osc = Math.sin(simTime*2*Math.PI/P)*TUNING.windOscillDeg*g
+            + Math.sin(simTime*2*Math.PI/(P*0.41)+1.7)*TUNING.windOscillDeg*0.42*g;
+  windBase.dir = (TUNING.windFromDeg+osc)*D2R;
+  updatePuffs(dt);
+
+  const local = windAt(boat.x, boat.y);
+  wind.fromDir = local.dir;
+  wind.spdKn   = local.spd;
+
+  // a slow average of the wind is what "shifted" is measured against
+  windMean = windMean + norm(local.dir-windMean)*(1-Math.exp(-dt/20));
+  shiftDeg = norm(local.dir-windMean)*R2D;
+  trackT += dt;
+  if(trackT>0.18){ trackT=0; TRACK.push({x:boat.x,y:boat.y}); if(TRACK.length>170) TRACK.shift(); }
+  traceT += dt;
+  if(traceT > 0.25){ traceT=0; trace.push(shiftDeg); if(trace.length>200) trace.shift(); }
+
+  /* --- capsized: everything stops until she's back up --- */
+  if (boat.capsized){
+    boat.recover -= dt; boat.spd *= Math.exp(-3*dt);
+    boat.heel = lerp(boat.heel, Math.sign(boat.heel)*88*D2R, 1-Math.exp(-6*dt));
+    if (boat.recover<=0){ boat.capsized=false; boat.heel=0; boat.heelV=0; boat.spd=0.2; }
+    if (running) clock+=dt;
+    return lastD;
+  }
+
+  /* --- steering --- */
+  let steer=pad.steer+touch.steer;
+  if(down('a','arrowleft'))steer-=1;
+  if(down('d','arrowright'))steer+=1;
+  steer=clamp(steer,-1,1);
+  boat.rudder=lerp(boat.rudder,steer,1-Math.exp(-(pad.on||isTouch?14:8)*dt));
+  // A stopped boat has no water flowing over the rudder, so she barely answers
+  // the helm. Keeping a floor here means you can always work her out of irons
+  // instead of being stuck head to wind forever.
+  const bite = clamp(0.24 + boat.spd/1.2, 0, 1);
+  boat.hdg=norm(boat.hdg + boat.rudder*TUNING.turnRateDeg*D2R*bite*dt);
+
+  /* --- sheet, board, crew --- */
+  let inn=pad.trimIn, out=pad.ease;
+  if(down('w','arrowup'))inn=1;
+  if(down('s','arrowdown'))out=1;
+  if(!touch.sheetHeld) boat.sheet+=(out-inn)*TUNING.sheetSpeedDeg*D2R*dt;
+  boat.sheet=clamp(boat.sheet,0,90*D2R);
+  if(down('q')||pad.boardUp||touch.boardUp)     boat.board-=TUNING.boardSpeed*dt;
+  if(down('e')||pad.boardDown||touch.boardDown) boat.board+=TUNING.boardSpeed*dt;
+  boat.board=clamp(boat.board,0,1);
+
+  let crewTarget = 0.35 + pad.crew*0.65;          // 0 = sitting in, 1 = fully hiked
+  if(down('shift')||touch.hike) crewTarget=1;
+  if(down('z'))     crewTarget=-0.25;             // leaning in, to windward
+  boat.crew = lerp(boat.crew, clamp(crewTarget,-0.3,1), 1-Math.exp(-6*dt));
+
+  /* --- apparent wind: the true wind minus your own motion --- */
+  const wv={x:-Math.sin(wind.fromDir)*wind.spdKn, y:Math.cos(wind.fromDir)*wind.spdKn};
+  const hv=vecOf(boat.hdg);
+  const aw={x:wv.x-hv.x*boat.spd, y:wv.y-hv.y*boat.spd};
+  const awSpd=Math.hypot(aw.x,aw.y);
+  const awa=norm(angOf(-aw.x,-aw.y)-boat.hdg);
+  const twa=norm(wind.fromDir-boat.hdg);
+
+  const side = awa>=0 ? 1 : -1;                    // +1 = wind over starboard
+  const alpha = Math.abs(awa)-boat.sheet;
+  const power = sailPower(alpha*R2D);
+
+  if(side!==telltale.sheetSign && Math.abs(awa)*R2D>120){
+    boat.spd*=(1-TUNING.gybeLoss);
+    boat.heelV += side*4.5;                        // the boom comes over and rolls her
+    rumble(0.85,0.4,220);
+  }
+  telltale={alpha:alpha*R2D,state:flowState(alpha*R2D,awa*R2D),awa:awa*R2D,sheetSign:side};
+  if(pad.on && telltale.state==='luffing' && simTime-lastRumble>0.18){ lastRumble=simTime; rumble(0,0.22,200); }
+
+  /* --- ROLL ------------------------------------------------
+     The sail pushes her over sideways, hardest when the wind
+     is on the beam. The sailor's weight pushes back. Waves
+     nudge her. Everything settles like a spring.            */
+  // measured against a 9 knot reference, so a heavy day really does
+  // try to put her over and a drifter barely leans her at all
+  const press = clamp(awSpd/9, 0, 2.4);
+  const heelForce = power*press*Math.sin(Math.abs(awa))*TUNING.heelGainDeg;
+  const righting  = boat.crew*TUNING.hikeGainDeg;
+  let targetHeel = clamp((heelForce - righting), -55, 70)*D2R * -side;
+  // by the lee she starts rolling to windward instead — the classic death roll
+  if(Math.abs(twa)*R2D>160)
+    targetHeel += side*TUNING.deathRollGain*D2R*Math.sin(simTime*2.3)*(1-boat.board*0.5);
+  const heelWave = (waveAt(boat.x+Math.cos(boat.hdg)*14, boat.y+Math.sin(boat.hdg)*14, simTime)
+                  - waveAt(boat.x-Math.cos(boat.hdg)*14, boat.y-Math.sin(boat.hdg)*14, simTime))
+                  * TUNING.waveSteepDeg*D2R;
+  boat.heelV += ((targetHeel+heelWave-boat.heel)*TUNING.heelStiff - boat.heelV*TUNING.heelDamp)*dt;
+  boat.heel  += boat.heelV*dt;
+
+  if(Math.abs(boat.heel)*R2D > TUNING.capsizeDeg){
+    boat.capsized=true; boat.recover=TUNING.recoverSec; rumble(1,0.8,450);
+  }
+
+  /* --- PITCH -----------------------------------------------
+     Stern squats when she accelerates, bow drops when she is
+     charging downhill in a breeze, and the waves do the rest. */
+  const hvv=vecOf(boat.hdg);
+  const pitchWave = (waveAt(boat.x+hvv.x*22, boat.y+hvv.y*22, simTime)
+                   - waveAt(boat.x-hvv.x*22, boat.y-hvv.y*22, simTime))*TUNING.waveSteepDeg*D2R;
+  const downhill = clamp((Math.abs(twa)*R2D-110)/70,0,1)*clamp(boat.spd/3,0,1);
+  const targetPitch = (-lastAccel*TUNING.pitchAccelGain + downhill*11)*D2R;
+  boat.pitchV += ((targetPitch+pitchWave-boat.pitch)*TUNING.pitchStiff - boat.pitchV*TUNING.pitchDamp)*dt;
+  boat.pitch  += boat.pitchV*dt;
+
+  /* --- speed ---------------------------------------------- */
+  const heelRatio = clamp(Math.abs(boat.heel)*R2D/TUNING.capsizeDeg,0,1);
+  const flat = 1 - TUNING.flatBonus*heelRatio*heelRatio;      // flat is fast
+  const nose = boat.pitch*R2D > TUNING.noseDiveDeg ? 0.72 : 1; // ploughing the bow under
+  const boardBonus = 1+TUNING.boardDragGain*(1-boat.board)*clamp((Math.abs(twa)*R2D-100)/60,0,1);
+  const target = polarSpeed(twa*R2D, awSpd*0.5+wind.spdKn*0.5)
+               * power * boardBonus * flat * nose * (1-TUNING.rudderDrag*Math.abs(boat.rudder));
+  const rate = target>boat.spd ? TUNING.accelPerSec : TUNING.decelPerSec;
+  const before = boat.spd;
+  boat.spd = Math.max(0, boat.spd + (target-boat.spd)*(1-Math.exp(-rate*dt/0.35)));
+  lastAccel = (boat.spd-before)/dt;
+  boat.spray = clamp(boat.spray + ((boat.spd>2.2 && boat.pitch>4*D2R ? 1:0) - boat.spray)*4*dt,0,1);
+
+  /* --- leeway: board up means she slides sideways ---------- */
+  const slipFrac = lerp(TUNING.leewayMin,TUNING.leewayMax,1-boat.board)*clamp(Math.cos(twa),0,1);
+  const perp={x:Math.cos(boat.hdg),y:Math.sin(boat.hdg)};
+  const slip=-side*slipFrac*boat.spd;
+  const k=KN*TUNING.pxPerM*dt;
+  boat.x+=(hv.x*boat.spd+perp.x*slip)*k;
+  boat.y+=(hv.y*boat.spd+perp.y*slip)*k;
+
+  // Stopped with the sail flogging, the wind simply pushes her bodily
+  // downwind. That is what gets a real boat out of irons.
+  if(boat.spd<0.5){
+    const dw=vecOf(wind.fromDir+Math.PI), drift=0.45*(1-boat.spd/0.5);
+    boat.x+=dw.x*drift*k; boat.y+=dw.y*drift*k;
+  }
+
+  /* --- course --------------------------------------------- */
+  /* ---- the starting sequence ---- */
+  if(phase==='pre'){
+    countdown-=dt;
+    if(countdown<=0){
+      countdown=0; phase='racing';
+      // over the line at the gun? you have to come back and start again
+      if(lineSide(startLine,boat.x,boat.y)!==startLine._s0) ocs=true;
+    }
+  } else {
+    raceTime+=dt;
+    clock=raceTime;
+    if(!started && reached(startLine)) { started=true; ocs=false; }
+  }
+
+  /* ---- penalty turns ----
+     Touch a mark or hit a rival and you owe a turn: a full circle,
+     sailed before you finish, or thirty seconds added to your time. */
+  hitCool-=dt;
+  if(phase==='racing' && hitCool<=0){
+    const touch=1.6*TUNING.markRadiusM*TUNING.pxPerM/6;
+    for(const k of course){
+      const pts = k.type==='mark' ? [k] : [k.a,k.b];
+      for(const q of pts)
+        if(Math.hypot(boat.x-q.x,boat.y-q.y) < touch+14){ pen++; hitCool=3; penalty='mark'; break; }
+      if(hitCool>0) break;
+    }
+    for(const b of RIVALS){
+      if(Math.hypot(boat.x-b.x,boat.y-b.y) < 3.2*TUNING.pxPerM){
+        // starboard tack has right of way; on the same tack the windward boat keeps clear
+        const myTack=telltale.sheetSign, hisTack=Math.sign(norm(wind.fromDir-b.hdg))||1;
+        const mine = myTack!==hisTack ? myTack<0        // port tack gives way
+                   : lineSide({a:{x:b.x,y:b.y},b:{x:b.x+Math.sin(b.hdg),y:b.y-Math.cos(b.hdg)}},boat.x,boat.y)===myTack;
+        if(mine){ pen++; penalty='foul'; }
+        boat.spd*=0.6; hitCool=3; break;
+      }
+    }
+  }
+  if(pen>0){
+    const dh=norm(boat.hdg-penPrevHdg); penPrevHdg=boat.hdg;
+    if(Math.abs(dh)>1e-4){
+      if(penDir===0||Math.sign(dh)===penDir){ penDir=Math.sign(dh); penTurn+=Math.abs(dh); }
+      else { penDir=Math.sign(dh); penTurn=Math.abs(dh); }
+      if(penTurn>=2*Math.PI){ pen--; penTurn=0; penDir=0; }
+    }
+  } else { penPrevHdg=boat.hdg; penTurn=0; penDir=0; }
+
+  /* ---- the rivals ---- */
+  for(const b of RIVALS) stepRival(b,dt);
+
+  /* ---- your own progress ---- */
+  const nextMark=course[wp];
+  if(phase==='racing' && started && nextMark && reached(nextMark)){
+    wp++;
+    if(wp>=course.length){                      // across the finish line
+      const t=raceTime + pen*30;                // unserved turns cost you thirty seconds each
+      if(best===null||t<best) best=t;
+      lastResult={ me:t, pen, at:simTime,
+                   rivals:RIVALS.map(b=>({n:b.n,c:b.c,t:b.fin})) };
+      showResults();
+      resetRun();
+    }
+  }
+  lastD = {twa:twa*R2D, awa:awa*R2D, awSpd, side, alpha:alpha*R2D};
+  return lastD;
+}
+let lastAccel=0, lastD={twa:0,awa:0,awSpd:0,side:1,alpha:0};
+
+/* ============================================================
+   DRAWING
+   ============================================================ */
+const cv=document.getElementById('sea'), ctx=cv.getContext('2d');
+const dv=document.getElementById('detail'), dctx=dv.getContext('2d');
+const tv=document.getElementById('trimView'), tctx=tv.getContext('2d');
+const wv=document.getElementById('wTrace'), wctx=wv.getContext('2d');
+const coachEl=document.getElementById('coach'), padHint=document.getElementById('padHint');
+const mv=document.getElementById('miniMap'), mctx=mv.getContext('2d');
+const spdFill=document.getElementById('spdFill'), spdTick=document.getElementById('spdTick');
+let W=0,H=0,DPR=1,GS=1;
+function resize(){
+  DPR=Math.min(devicePixelRatio||1, isTouch?1.8:2);
+  W=cv.clientWidth; H=cv.clientHeight;
+  cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  GS = W<820 ? 0.72 : 1;
+  for(const [c,x,y,sc] of [[dv,200,132,GS],[tv,180,132,GS],[wv,164,54,1],[mv,88,124,W<820?0.8:1]]){
+    c.width=x*DPR; c.height=y*DPR;
+    c.getContext('2d').setTransform(DPR,0,0,DPR,0,0);
+    c.style.width=(x*sc)+'px'; c.style.height=(y*sc)+'px';
+  }
+  // zoom out a little on a phone so more of the course fits on screen
+  const ppm = W<820 ? 6 : 8.5;
+  if(ppm!==TUNING.pxPerM){ TUNING.pxPerM=ppm; resetRun(); }
+}
+addEventListener('resize',resize);
+addEventListener('orientationchange',()=>setTimeout(resize,120));
+resize();
+
+const C = { sea:'#1d7f9c', deep:'#14607a', foam:'#dff4f8', ink:'#10333f',
+            hull:'#fbf4e2', hullSh:'#d9c9a4', sail:'#fffaf0', stripe:'#e04a45',
+            vest:'#ffc63d', skin:'#f0c39a', cap:'#2f6f8f', board:'#8fd9e8' };
+
+/* cartoon water: crest arcs drawn straight from the wave function */
+function drawWater(cam){
+  ctx.fillStyle=C.sea; ctx.fillRect(0,0,W,H);
+  const gs=46;
+  const w=vecOf(wind.fromDir+Math.PI);
+  ctx.lineCap='round';
+  for(let sy=-gs; sy<H+gs; sy+=gs){
+    for(let sx=-gs; sx<W+gs; sx+=gs){
+      const jx=((sx+sy*0.7)%(gs*2))*0.25;
+      const wx=sx+cam.x+jx, wy=sy+cam.y;
+      const h=waveAt(wx,wy,simTime);
+      if(h<0.25) continue;
+      const a=(h-0.25)/0.75;
+      ctx.strokeStyle=`rgba(223,244,248,${0.10+0.30*a})`;
+      ctx.lineWidth=2+2*a;
+      const len=9+11*a;
+      ctx.beginPath();
+      ctx.moveTo(sx-w.y*len+jx, sy+w.x*len);
+      ctx.quadraticCurveTo(sx+w.x*5+jx, sy+w.y*5, sx+w.y*len+jx, sy-w.x*len);
+      ctx.stroke();
+    }
+  }
+}
+
+function roundHull(g,L,sx,dx,sy,dy){
+  const X=x=>x*sx+dx, Y=y=>y*sy+dy;
+  g.beginPath();
+  g.moveTo(X(-L*0.19),Y(-L*0.50));            // blunt pram bow
+  g.lineTo(X( L*0.19),Y(-L*0.50));
+  g.quadraticCurveTo(X(L*0.36),Y(-L*0.06), X(L*0.31),Y(L*0.44));
+  g.lineTo(X(-L*0.31),Y(L*0.44));
+  g.quadraticCurveTo(X(-L*0.36),Y(-L*0.06), X(-L*0.19),Y(-L*0.50));
+  g.closePath();
+}
+
+function drawBoat(sx,sy,d){
+  const L=2.3*TUNING.pxPerM*2.1;
+  const heel=boat.heel, pitch=boat.pitch;
+  const lee=-d.side;                                  // which way is downwind, in boat coords
+  const beam=Math.max(0.42,Math.cos(heel));
+  const fore=Math.max(0.80,Math.cos(pitch));
+  const half=L*0.34;
+
+  ctx.save(); ctx.translate(sx,sy);
+
+  // shadow on the water, thrown to leeward as she leans
+  ctx.save(); ctx.rotate(boat.hdg);
+  ctx.fillStyle='rgba(8,50,66,.26)';
+  ctx.beginPath();
+  ctx.ellipse(lee*Math.sin(heel)*half*1.5, Math.sin(pitch)*L*0.25,
+              half*beam*1.15, L*0.56*fore, 0, 0, 7);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(boat.hdg);
+
+  if(boat.capsized){ drawCapsized(L,lee); ctx.restore(); return; }
+
+  // wake
+  if(boat.spd>0.6){
+    ctx.strokeStyle=`rgba(223,244,248,${0.14+0.16*Math.min(boat.spd/4,1)})`;
+    ctx.lineWidth=3; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(-L*0.26,L*0.44); ctx.lineTo(-L*0.62,L*1.3+boat.spd*7);
+    ctx.moveTo( L*0.26,L*0.44); ctx.lineTo( L*0.62,L*1.3+boat.spd*7);
+    ctx.stroke();
+  }
+
+  // daggerboard, visible through the hull
+  ctx.strokeStyle=C.board; ctx.globalAlpha=0.30+0.5*boat.board;
+  ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,-L*0.04); ctx.lineTo(lee*Math.sin(heel)*L*0.2, L*0.06+boat.board*L*0.24);
+  ctx.stroke(); ctx.globalAlpha=1;
+
+  // the leaning hull: a dark topside band under a lighter deck.
+  // The bigger the gap between them, the more she is heeled over.
+  const deckDX = -lee*(1-beam)*half*0.95;
+  const deckDY = -Math.sin(pitch)*L*0.16;
+  roundHull(ctx,L,1,lee*(1-beam)*half*0.35,1,Math.sin(pitch)*L*0.10);
+  ctx.fillStyle=C.hullSh; ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.stroke();
+
+  roundHull(ctx,L,beam,deckDX,fore,deckDY);
+  ctx.fillStyle=C.hull; ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.stroke();
+
+  // thwart, for a bit of cartoon detail
+  ctx.strokeStyle='rgba(16,51,63,.35)'; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(-half*beam*0.82+deckDX, L*0.06*fore+deckDY);
+  ctx.lineTo( half*beam*0.82+deckDX, L*0.06*fore+deckDY); ctx.stroke();
+
+  // the sailor, sitting on the windward rail and hiking out over it
+  const rail = -lee*(half*beam*0.85)+deckDX;
+  const out  = -lee*boat.crew*half*0.75;
+  const cx = rail+out, cy = L*0.10*fore+deckDY;
+  ctx.strokeStyle=C.ink; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(rail*0.55,cy); ctx.lineTo(cx,cy); ctx.stroke();   // legs under the strap
+  ctx.fillStyle=C.vest; ctx.beginPath(); ctx.arc(cx,cy,L*0.115,0,7); ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.stroke();
+  ctx.fillStyle=C.cap;  ctx.beginPath(); ctx.arc(cx,cy,L*0.062,0,7); ctx.fill();
+
+  // mast and sail. The masthead swings to leeward with the heel,
+  // which is the clearest read on how far over she is.
+  const mastBase={x:0, y:-L*0.34*fore+deckDY};
+  const mastLen=L*0.95;
+  const tipX=mastBase.x + lee*Math.sin(heel)*mastLen;
+  const tipY=mastBase.y + Math.sin(pitch)*mastLen*0.55;
+  ctx.strokeStyle='rgba(16,51,63,.45)'; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(mastBase.x,mastBase.y); ctx.lineTo(tipX,tipY); ctx.stroke();
+
+  const boomA = Math.PI + boat.sheet*d.side;      // in boat-local coords now
+  const bl=L*0.80;
+  const endX=tipX+Math.sin(boomA)*bl, endY=tipY-Math.cos(boomA)*bl;
+  const cam2=d.side*bl*0.22*(telltale.state==='luffing'?0.05:1);
+  const mx=(tipX+endX)/2+Math.cos(boomA)*cam2, my=(tipY+endY)/2+Math.sin(boomA)*cam2;
+
+  ctx.beginPath(); ctx.moveTo(tipX,tipY); ctx.quadraticCurveTo(mx,my,endX,endY);
+  ctx.lineTo(endX,endY);
+  ctx.strokeStyle=telltale.state==='luffing'?'rgba(255,250,240,.55)':C.sail;
+  ctx.lineWidth=telltale.state==='luffing'?4:6;
+  if(telltale.state==='luffing') ctx.setLineDash([7,5]);
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle=C.stripe; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(tipX,tipY); ctx.quadraticCurveTo(mx,my,endX,endY); ctx.stroke();
+
+  drawTelltales({x:tipX,y:tipY},{x:mx,y:my},{x:endX,y:endY},boomA,d.side);
+
+  // spray off the bow when she buries it
+  if(boat.spray>0.05){
+    ctx.fillStyle=`rgba(223,244,248,${0.5*boat.spray})`;
+    for(let i=0;i<7;i++){
+      const t=(simTime*7+i*1.7)%1, r=L*(0.5+t*0.5), a=(-1+ (i/6)*2)*0.6;
+      ctx.beginPath(); ctx.arc(Math.sin(a)*r*0.5, -r, 3.5*(1-t)+1, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawRival(b,cam){
+  const x=b.x-cam.x, y=b.y-cam.y;
+  if(x<-70||y<-70||x>W+70||y>H+70) return;
+  const L=2.3*TUNING.pxPerM*2.1, beam=Math.max(.45,Math.cos(b.heel*2)), lee=-Math.sign(b.heel||1);
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle='rgba(8,50,66,.22)';
+  ctx.beginPath(); ctx.ellipse(0,3,L*0.34,L*0.5,b.hdg,0,7); ctx.fill();
+  ctx.rotate(b.hdg);
+  if(b.spd>0.8){
+    ctx.strokeStyle='rgba(223,244,248,.16)'; ctx.lineWidth=2.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-L*.24,L*.42); ctx.lineTo(-L*.5,L*1.1+b.spd*5);
+    ctx.moveTo(L*.24,L*.42); ctx.lineTo(L*.5,L*1.1+b.spd*5); ctx.stroke();
+  }
+  roundHull(ctx,L,beam,0,1,0);
+  ctx.fillStyle=C.hull; ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.stroke();
+  // sail, out on the leeward side
+  const twa=norm(wind.fromDir-b.hdg), side=twa>=0?1:-1;
+  const sheet=clamp((Math.abs(twa)-17*D2R),0,88*D2R);
+  const base={x:0,y:-L*0.34}, tip={x:lee*Math.sin(b.heel)*L*0.9, y:base.y};
+  const ba=Math.PI+sheet*side, bl=L*0.78;
+  ctx.strokeStyle=b.c; ctx.lineWidth=5; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(tip.x,tip.y);
+  ctx.quadraticCurveTo(tip.x+Math.sin(ba)*bl*0.5+Math.cos(ba)*side*bl*0.2,
+                       tip.y-Math.cos(ba)*bl*0.5+Math.sin(ba)*side*bl*0.2,
+                       tip.x+Math.sin(ba)*bl, tip.y-Math.cos(ba)*bl);
+  ctx.stroke();
+  ctx.fillStyle=C.vest; ctx.beginPath(); ctx.arc(-lee*L*0.16,L*0.08,L*0.1,0,7); ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,.75)'; ctx.font='600 11px Fredoka,sans-serif'; ctx.textAlign='center';
+  ctx.fillText(b.n + (b.fin!==null?' ✓':''), x, y-L*0.72);
+}
+
+function drawCapsized(L,lee){
+  ctx.fillStyle='rgba(255,250,240,.35)';
+  ctx.beginPath(); ctx.ellipse(lee*L*0.7,0,L*0.85,L*0.32,0,0,7); ctx.fill();
+  roundHull(ctx,L,0.22,0,1,0);
+  ctx.fillStyle=C.hullSh; ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.stroke();
+  ctx.fillStyle=C.vest; ctx.beginPath(); ctx.arc(lee*L*0.34,L*0.1,L*0.11,0,7); ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.stroke();
+  const p=1-boat.recover/TUNING.recoverSec;
+  ctx.fillStyle='rgba(16,51,63,.6)'; ctx.fillRect(-L*0.5,-L*0.85,L,7);
+  ctx.fillStyle=C.sun; ctx.fillRect(-L*0.5,-L*0.85,L*p,7);
+}
+
+function drawTelltales(mast,mid,end,boomA,side){
+  [0.28,0.62,0.94].forEach((t,i)=>{
+    const x=(1-t)*(1-t)*mast.x+2*(1-t)*t*mid.x+t*t*end.x;
+    const y=(1-t)*(1-t)*mast.y+2*(1-t)*t*mid.y+t*t*end.y;
+    const dir=strandDir(boomA,i,simTime);
+    const len=telltale.state==='running'?8:13;
+    ctx.strokeStyle=i===2?'#ffffff':(side>0?C.stbd:C.port);
+    ctx.lineWidth=2.6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x,y);
+    ctx.lineTo(x+Math.sin(dir)*len,y-Math.cos(dir)*len); ctx.stroke();
+  });
+}
+function strandDir(boomA,i,t){
+  const wob=Math.sin(t*9+i*2.1);
+  switch(telltale.state){
+    case 'attached': return boomA+Math.PI+wob*0.05;
+    case 'soft':     return boomA+Math.PI+wob*0.22;
+    case 'luffing':  return boomA+Math.PI+Math.sin(t*22+i*3)*1.1;
+    case 'stalled':  return i===2 ? boomA+Math.sin(t*13)*0.9 : boomA+Math.PI+wob*0.12;
+    default:         return boomA+Math.PI*0.6+Math.sin(t*2.2+i)*0.6;
+  }
+}
+
+function drawScenery(cam){
+  for(const o of SCENERY){
+    const x=o.x-cam.x, y=o.y-cam.y;
+    if(x<-40||y<-40||x>W+40||y>H+40) continue;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(o.r); ctx.scale(o.s,o.s);
+    if(o.k==='weed'){
+      ctx.fillStyle='rgba(20,90,80,.42)';
+      for(let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.ellipse(Math.cos(i*1.9)*7,Math.sin(i*1.9)*5,7,4,i*1.1,0,7);
+        ctx.fill();
+      }
+    } else if(o.k==='foam'){
+      ctx.strokeStyle='rgba(223,244,248,.30)'; ctx.lineWidth=2.4; ctx.lineCap='round';
+      ctx.beginPath();
+      for(let i=0;i<3;i++){ ctx.moveTo(-9+i*4,-5+i*5); ctx.lineTo(3+i*4,-6+i*5); }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle='#f2683a'; ctx.strokeStyle=C.ink; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(0,0,4.5,0,7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,-4); ctx.lineTo(0,-13); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawTrack(cam){
+  if(TRACK.length<2) return;
+  ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let i=1;i<TRACK.length;i++){
+    const a=(i/TRACK.length)*0.5;
+    ctx.strokeStyle=`rgba(223,244,248,${a})`;
+    ctx.beginPath();
+    ctx.moveTo(TRACK[i-1].x-cam.x,TRACK[i-1].y-cam.y);
+    ctx.lineTo(TRACK[i].x-cam.x,TRACK[i].y-cam.y);
+    ctx.stroke();
+  }
+}
+
+/* Flecks of surface texture sitting still in the water. They stretch into
+   streaks along your track as you speed up, so how fast she is going is
+   something you feel in the whole screen rather than read off a dial. */
+function drawRush(cam){
+  const spd=boat.spd;
+  if(spd<0.15) return;
+  const hv=vecOf(boat.hdg);
+  const len=Math.min(spd,5)*5.5;                 // streak length grows with speed
+  const a=clamp(spd/4,0,1);
+  ctx.strokeStyle=`rgba(223,244,248,${0.08+0.24*a})`;
+  ctx.lineWidth=1.6; ctx.lineCap='round';
+  const gs=64;
+  ctx.beginPath();
+  for(let sy=-gs; sy<H+gs; sy+=gs){
+    for(let sx=-gs; sx<W+gs; sx+=gs){
+      const ox=(sx+cam.x)%gs, oy=(sy+cam.y)%gs;
+      const jx=((Math.sin((sx+cam.x)*0.013)+1)*gs*0.5);
+      const jy=((Math.cos((sy+cam.y)*0.017)+1)*gs*0.5);
+      const px=sx-ox+jx, py=sy-oy+jy;
+      ctx.moveTo(px,py); ctx.lineTo(px-hv.x*len, py-hv.y*len);
+    }
+  }
+  ctx.stroke();
+}
+
+/* Puffs read as dark, ruffled patches and lulls as smooth pale ones —
+   the same thing you look for on real water. */
+function drawPuffs(cam){
+  for(const p of PUFFS){
+    const sx=p.x-cam.x, sy=p.y-cam.y;
+    if(sx<-p.r||sy<-p.r||sx>W+p.r||sy>H+p.r) continue;
+    const strong=p.dv>0;
+    const a=Math.min(Math.abs(p.dv)/TUNING.puffStrength,1)*0.5;
+    const g=ctx.createRadialGradient(sx,sy,p.r*0.15,sx,sy,p.r);
+    if(strong){ g.addColorStop(0,`rgba(9,68,88,${a})`); g.addColorStop(1,'rgba(9,68,88,0)'); }
+    else      { g.addColorStop(0,`rgba(150,214,230,${a*0.55})`); g.addColorStop(1,'rgba(150,214,230,0)'); }
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sx,sy,p.r,0,7); ctx.fill();
+    if(strong){                                 // ruffle the surface inside a puff
+      ctx.strokeStyle=`rgba(9,68,88,${a*0.7})`; ctx.lineWidth=2; ctx.lineCap='round';
+      const w=vecOf(windBase.dir+Math.PI);
+      ctx.beginPath();
+      for(let i=0;i<9;i++){
+        const t=(i*2.399), rr=p.r*0.82*Math.sqrt(i/9);
+        const px=sx+Math.cos(t)*rr, py=sy+Math.sin(t)*rr;
+        ctx.moveTo(px-w.y*7,py+w.x*7); ctx.lineTo(px+w.y*7,py-w.x*7);
+      }
+      ctx.stroke();
+    }
+  }
+}
+
+/* The shift trace: the last minute of wind direction. Learning to read
+   the swing here is how you work out when to tack. */
+function drawTrace(d){
+  const w=164,h=54, mid=h/2;
+  const span=Math.max(6, TUNING.windOscillDeg*TUNING.shiftGain*1.9);
+  wctx.clearRect(0,0,w,h); wctx.fillStyle='#0c2732'; wctx.fillRect(0,0,w,h);
+
+  // which side of the mean favours which tack
+  wctx.fillStyle='rgba(63,184,119,.10)'; wctx.fillRect(0,0,w,mid);
+  wctx.fillStyle='rgba(224,74,69,.10)';  wctx.fillRect(0,mid,w,mid);
+  wctx.strokeStyle='rgba(255,255,255,.28)'; wctx.lineWidth=1;
+  wctx.beginPath(); wctx.moveTo(0,mid); wctx.lineTo(w,mid); wctx.stroke();
+
+  if(trace.length>1){
+    wctx.strokeStyle='#ffd66b'; wctx.lineWidth=2; wctx.lineJoin='round'; wctx.lineCap='round';
+    wctx.beginPath();
+    trace.forEach((v,i)=>{
+      const x=w-(trace.length-1-i)*(w/200);
+      const y=mid-clamp(v/span,-1,1)*(mid-4);
+      i?wctx.lineTo(x,y):wctx.moveTo(x,y);
+    });
+    wctx.stroke();
+    const y=mid-clamp(shiftDeg/span,-1,1)*(mid-4);
+    wctx.fillStyle='#fff'; wctx.beginPath(); wctx.arc(w-2,y,3.5,0,7); wctx.fill();
+  }
+
+  wctx.font='8px Fredoka,sans-serif'; wctx.fillStyle='rgba(255,255,255,.4)';
+  wctx.textAlign='left';  wctx.fillText('RIGHT SHIFT',4,10);
+  wctx.fillText('LEFT SHIFT',4,h-4);
+
+  // upwind, a shift onto your bow is a header and it is time to tack
+  const beating = Math.abs(d.twa)<70 && !paused;
+  const lifted = shiftDeg*Math.sign(d.twa||1) > 0;
+  const mag = Math.abs(shiftDeg);
+  const badge=document.getElementById('wShift');
+  if(!beating || mag<1.5){ badge.textContent='—'; badge.style.color='rgba(255,255,255,.5)'; }
+  else if(lifted){ badge.textContent=`LIFTED ${mag.toFixed(0)}°`; badge.style.color='#3fb877'; }
+  else { badge.textContent=`HEADED ${mag.toFixed(0)}°`; badge.style.color='#e04a45'; }
+  document.getElementById('wDir').textContent =
+    String(Math.round((((wind.fromDir*R2D)%360)+360)%360)).padStart(3,'0');
+  document.getElementById('wSpd').textContent = wind.spdKn.toFixed(1);
+}
+
+/* ---------- gauge: the view from astern, plus a side view ---------- */
+function drawTrimView(){
+  const w=180,h=132;
+  tctx.clearRect(0,0,w,h);
+  tctx.fillStyle='#0c2732'; tctx.fillRect(0,0,w,h);
+
+  // ---- stern view (roll) on the left
+  const cx=64, cy=76;
+  tctx.save(); tctx.translate(cx,cy); tctx.rotate(boat.heel);
+  tctx.strokeStyle=C.ink; tctx.lineJoin='round';
+  // hull cross-section
+  tctx.beginPath();
+  tctx.moveTo(-26,-9); tctx.lineTo(26,-9);
+  tctx.lineTo(19,12); tctx.quadraticCurveTo(0,17,-19,12); tctx.closePath();
+  tctx.fillStyle=C.hull; tctx.fill(); tctx.lineWidth=3; tctx.stroke();
+  // daggerboard
+  tctx.strokeStyle=C.board; tctx.lineWidth=4; tctx.lineCap='round';
+  tctx.beginPath(); tctx.moveTo(0,10); tctx.lineTo(0,14+boat.board*20); tctx.stroke();
+  // mast
+  tctx.strokeStyle='rgba(255,255,255,.7)'; tctx.lineWidth=3;
+  tctx.beginPath(); tctx.moveTo(0,-9); tctx.lineTo(0,-62); tctx.stroke();
+  tctx.strokeStyle=C.sail; tctx.lineWidth=5;
+  tctx.beginPath(); tctx.moveTo(0,-58); tctx.lineTo(-telltale.sheetSign*13,-16); tctx.stroke();
+  // the sailor, hiking further out the harder you push
+  const hx=telltale.sheetSign*(20+boat.crew*17), hy=-9-boat.crew*7;
+  tctx.strokeStyle=C.ink; tctx.lineWidth=3;
+  tctx.beginPath(); tctx.moveTo(telltale.sheetSign*13,-6); tctx.lineTo(hx,hy); tctx.stroke();
+  tctx.fillStyle=C.vest; tctx.beginPath(); tctx.arc(hx,hy,7,0,7); tctx.fill();
+  tctx.lineWidth=2.5; tctx.stroke();
+  tctx.fillStyle=C.cap; tctx.beginPath(); tctx.arc(hx,hy-1,3.6,0,7); tctx.fill();
+  tctx.restore();
+  // waterline stays level, so the boat visibly tilts against it
+  tctx.strokeStyle='rgba(223,244,248,.5)'; tctx.lineWidth=2;
+  tctx.beginPath(); tctx.moveTo(8,cy+9); tctx.lineTo(120,cy+9); tctx.stroke();
+  tctx.fillStyle='rgba(29,127,156,.55)'; tctx.fillRect(8,cy+9,112,h-cy-13);
+
+  // ---- side view (pitch) on the right
+  const px=148, py=64;
+  tctx.save(); tctx.translate(px,py); tctx.rotate(boat.pitch);
+  tctx.beginPath();
+  tctx.moveTo(-15,-7); tctx.lineTo(15,-7); tctx.lineTo(12,7); tctx.lineTo(-12,7); tctx.closePath();
+  tctx.fillStyle=C.hull; tctx.fill(); tctx.strokeStyle=C.ink; tctx.lineWidth=2.5; tctx.stroke();
+  tctx.strokeStyle='rgba(255,255,255,.7)'; tctx.lineWidth=2.5;
+  tctx.beginPath(); tctx.moveTo(-9,-7); tctx.lineTo(-9,-34); tctx.stroke();
+  tctx.restore();
+  tctx.strokeStyle='rgba(223,244,248,.5)'; tctx.lineWidth=2;
+  tctx.beginPath(); tctx.moveTo(126,py+8); tctx.lineTo(172,py+8); tctx.stroke();
+
+  tctx.fillStyle='rgba(255,255,255,.55)'; tctx.font='10px Fredoka,sans-serif';
+  tctx.textAlign='center';
+  tctx.fillText('ROLL',64,h-6); tctx.fillText('PITCH',148,h-6);
+
+  const hd=Math.abs(boat.heel*R2D);
+  document.getElementById('trimLabel').textContent =
+    boat.capsized ? 'Capsized — hang on' :
+    hd<7  ? 'Nice and flat' :
+    hd<18 ? 'A little heel, fine' :
+    hd<30 ? 'Heeling — hike harder' : 'Way over, hike out now';
+}
+
+/* ---------- gauge: the enlarged telltale view ---------- */
+function drawDetail(d){
+  const w=200,h=132;
+  dctx.clearRect(0,0,w,h); dctx.fillStyle='#0c2732'; dctx.fillRect(0,0,w,h);
+  const mast={x:30,y:24}, end={x:172,y:104}, cam=24;
+  const mid={x:(mast.x+end.x)/2-cam*0.7, y:(mast.y+end.y)/2+cam*0.7};
+  dctx.beginPath(); dctx.moveTo(mast.x,mast.y); dctx.quadraticCurveTo(mid.x,mid.y,end.x,end.y);
+  dctx.strokeStyle=telltale.state==='luffing'?'rgba(255,250,240,.45)':C.sail;
+  dctx.lineWidth=5; if(telltale.state==='luffing') dctx.setLineDash([7,6]);
+  dctx.lineCap='round'; dctx.stroke(); dctx.setLineDash([]);
+  dctx.fillStyle=C.sun; dctx.beginPath(); dctx.arc(mast.x,mast.y,5,0,7); dctx.fill();
+
+  dctx.strokeStyle='rgba(143,217,232,.5)'; dctx.lineWidth=2; dctx.lineCap='round';
+  for(let k=0;k<3;k++){
+    const yy=30+k*24, xo=((simTime*70+k*24)%38)-19;
+    dctx.beginPath(); dctx.moveTo(2+xo,yy); dctx.lineTo(20+xo,yy+8); dctx.stroke();
+  }
+
+  const base=Math.atan2(end.x-mast.x,-(end.y-mast.y));
+  [0.26,0.60,0.93].forEach((t,i)=>{
+    const x=(1-t)*(1-t)*mast.x+2*(1-t)*t*mid.x+t*t*end.x;
+    const y=(1-t)*(1-t)*mast.y+2*(1-t)*t*mid.y+t*t*end.y;
+    const dir=strandDir(base,i,simTime), len=telltale.state==='running'?13:20;
+    dctx.strokeStyle=i===2?'#ffffff':(d.side>0?C.stbd:C.port);
+    dctx.lineWidth=3; dctx.lineCap='round';
+    const mx=x+Math.sin(dir)*len*0.55, my=y-Math.cos(dir)*len*0.55;
+    const d2=dir+Math.sin(simTime*7+i)*(telltale.state==='attached'?0.06:0.5);
+    dctx.beginPath(); dctx.moveTo(x,y); dctx.lineTo(mx,my);
+    dctx.lineTo(mx+Math.sin(d2)*len*0.55,my-Math.cos(d2)*len*0.55); dctx.stroke();
+  });
+
+  document.getElementById('detailLabel').textContent = {
+    attached:'Flowing — this is the one',
+    soft:'Nearly there, trim a touch',
+    luffing:'Luffing — sail is flapping',
+    stalled:'Stalled — leech is curling',
+    running:'Running deep — no flow to read'
+  }[telltale.state];
+}
+
+function drawMark(sx,sy,label,live){
+  ctx.save(); ctx.translate(sx,sy);
+  const R=TUNING.markRadiusM*TUNING.pxPerM;
+  if(live){                                    // the mark you are heading for pulses
+    const p=0.5+0.5*Math.sin(simTime*2.6);
+    ctx.strokeStyle=`rgba(255,214,107,${0.25+0.35*p})`; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,0,R+6+p*7,0,7); ctx.stroke();
+  }
+  ctx.fillStyle='rgba(242,104,58,.16)';
+  ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill();
+  ctx.fillStyle='rgba(8,50,66,.3)';
+  ctx.beginPath(); ctx.ellipse(4,6,15,8,0,0,7); ctx.fill();
+  // a pole and flag, so it stands up out of the water and reads from a distance
+  ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,4); ctx.lineTo(0,-34); ctx.stroke();
+  const f=Math.sin(simTime*4)*2;
+  ctx.fillStyle=C.buoy;
+  ctx.beginPath(); ctx.moveTo(0,-34); ctx.lineTo(19,-28+f); ctx.lineTo(0,-22); ctx.closePath();
+  ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
+  ctx.fillStyle=C.buoy;
+  ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(11,9); ctx.lineTo(-11,9); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.stroke();
+  if(label){
+    ctx.fillStyle='rgba(255,255,255,.8)'; ctx.font='11px Fredoka,sans-serif';
+    ctx.textAlign='center'; ctx.fillText(label,0,28);
+  }
+  ctx.restore();
+}
+
+/* When the mark is off the edge of the screen, pin an arrow to the rim
+   pointing at it, with how far away it is. */
+function drawPointer(goal,cam,label){
+  const gx=goal.x-cam.x, gy=goal.y-cam.y, m=64;
+  if(gx>m && gx<W-m && gy>m && gy<H-m) return;
+  const cx=W/2, cy=H/2;
+  const a=Math.atan2(gy-cy,gx-cx);
+  const rx=(W/2-m)/Math.abs(Math.cos(a)), ry=(H/2-m)/Math.abs(Math.sin(a));
+  const r=Math.min(rx,ry);
+  const px=cx+Math.cos(a)*r, py=cy+Math.sin(a)*r;
+  const dist=Math.hypot(gx-cx,gy-cy)/TUNING.pxPerM;
+  ctx.save(); ctx.translate(px,py);
+  ctx.rotate(a);
+  ctx.fillStyle=C.sun; ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(19,0); ctx.lineTo(-9,-13); ctx.lineTo(-3,0); ctx.lineTo(-9,13);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle='rgba(16,51,63,.75)';
+  const txt=`${label}  ${Math.round(dist)}m`;
+  ctx.font='600 12px Fredoka,sans-serif'; ctx.textAlign='center';
+  const tw=ctx.measureText(txt).width+14;
+  const lx=clamp(px-Math.cos(a)*30,tw/2+4,W-tw/2-4), ly=clamp(py-Math.sin(a)*30,20,H-14);
+  ctx.beginPath(); ctx.roundRect(lx-tw/2,ly-13,tw,20,10); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.fillText(txt,lx,ly+2);
+}
+
+/* A small chart of the whole course, so you always know where you are on it. */
+function drawMap(){
+  const w=88,h=124;
+  mctx.clearRect(0,0,w,h); mctx.fillStyle='#0c2732'; mctx.fillRect(0,0,w,h);
+  if(!course.length) return;
+  // fit whichever course is set into the little window
+  const xs=[0,boat.x], ys=[0,boat.y];
+  course.forEach(c=>{ xs.push(c.x); ys.push(c.y);
+    if(c.a){ xs.push(c.a.x,c.b.x); ys.push(c.a.y,c.b.y); } });
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const pad=11, sc=Math.min((w-pad*2)/Math.max(1,x1-x0),(h-pad*2)/Math.max(1,y1-y0));
+  const ox=(w-(x1-x0)*sc)/2, oy=(h-(y1-y0)*sc)/2;
+  const X=x=>ox+(x-x0)*sc, Y=y=>oy+(y-y0)*sc;
+
+  mctx.strokeStyle='rgba(255,255,255,.22)'; mctx.lineWidth=1; mctx.setLineDash([3,3]);
+  mctx.beginPath(); mctx.moveTo(X(0),Y(0));
+  course.forEach(c=>mctx.lineTo(X(c.x),Y(c.y)));
+  mctx.stroke(); mctx.setLineDash([]);
+
+  if(TRACK.length>1){
+    mctx.strokeStyle='rgba(223,244,248,.5)'; mctx.lineWidth=1.5;
+    mctx.beginPath();
+    TRACK.forEach((t,i)=>{ const x=X(t.x),y=Y(t.y); i?mctx.lineTo(x,y):mctx.moveTo(x,y); });
+    mctx.stroke();
+  }
+  course.forEach((c,i)=>{
+    mctx.fillStyle = i===wp ? C.sun : 'rgba(242,104,58,.85)';
+    mctx.beginPath(); mctx.arc(X(c.x),Y(c.y), i===wp?4:2.5, 0,7); mctx.fill();
+  });
+  for(const b of RIVALS){
+    mctx.fillStyle=b.c;
+    mctx.beginPath(); mctx.arc(X(b.x),Y(b.y),2.6,0,7); mctx.fill();
+  }
+  mctx.save(); mctx.translate(X(boat.x),Y(boat.y)); mctx.rotate(boat.hdg);
+  mctx.fillStyle='#fff'; mctx.beginPath();
+  mctx.moveTo(0,-6); mctx.lineTo(4,5); mctx.lineTo(-4,5); mctx.closePath(); mctx.fill();
+  mctx.restore();
+}
+
+function coachText(d){
+  if(boat.capsized) return ['Capsized — she will come back up','#e04a45'];
+  const twa=Math.abs(d.twa), hd=Math.abs(boat.heel*R2D);
+  if(hd>30) return ['Too much heel — hike out hard','#e04a45'];
+  if(twa<32 && boat.spd<0.6) return ['In irons — hold the helm over until she swings','#e04a45'];
+  if(twa<32) return ['Too close to the wind — turn away from it','#e04a45'];
+  if(telltale.state==='luffing') return ['Trim in — the sail is luffing','#e04a45'];
+  if(telltale.state==='stalled') return ['Ease the sheet — the leech is stalled','#f2683a'];
+  if(boat.pitch*R2D>TUNING.noseDiveDeg) return ['Bow is burying — move your weight aft','#f2683a'];
+  if(telltale.state==='soft') return ['Trim in a little more','#ffd66b'];
+  if(twa>160) return ['By the lee — she will roll, come up a bit','#ffd66b'];
+  if(twa<70 && shiftDeg*Math.sign(d.twa||1) < -4)
+    return ['Headed — tack onto the shift','#ffd66b'];
+  if(twa<70 && shiftDeg*Math.sign(d.twa||1) > 4)
+    return ['Lifted — stay on this tack','#3fb877'];
+  if(twa>120 && boat.board>0.5) return ['Running deep — pull the daggerboard up','#ffd66b'];
+  if(twa<60 && boat.board<0.85) return ['Upwind — put the daggerboard down','#ffd66b'];
+  if(hd<8) return ['Flat and flowing — keep her there','#3fb877'];
+  return ['Looking good — watch your VMG','#3fb877'];
+}
+
+/* ============================================================ */
+let last=performance.now(), acc=0, d=lastD;
+const FIXED=1/60;
+function frame(now){
+  pollPad();
+  const dts=Math.min((now-last)/1000,0.25); last=now;
+  if(paused){ acc=0; simTime+=dts*0.4; }        // sea keeps moving, boat does not
+  else { acc+=dts; while(acc>=FIXED){ d=step(FIXED); acc-=FIXED; } }
+
+  // the view creeps ahead of the boat as she accelerates, which makes
+  // speeding up and slowing down something you feel in the camera too
+  const lead=vecOf(boat.hdg);
+  const cam={ x:boat.x-W/2+lead.x*boat.spd*14, y:boat.y-H/2+lead.y*boat.spd*14 };
+  drawWater(cam);
+  drawPuffs(cam);
+  drawRush(cam);
+  drawScenery(cam);
+  drawTrack(cam);
+  const S=p=>({x:p.x-cam.x,y:p.y-cam.y});
+
+  // the route, drawn dim, with the leg you are on picked out
+  if(course.length){
+    ctx.setLineDash([9,11]); ctx.lineWidth=2;
+    let px=-cam.x, py=-cam.y;                     // the route starts at the line
+    course.forEach((c,i)=>{
+      ctx.strokeStyle = i===wp ? 'rgba(255,214,107,.5)' : 'rgba(255,255,255,.12)';
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(c.x-cam.x,c.y-cam.y); ctx.stroke();
+      px=c.x-cam.x; py=c.y-cam.y;
+    });
+    ctx.setLineDash([]);
+  }
+
+  const goal = course[wp] || {x:0,y:0,name:'FINISH'};
+
+  // laylines, but only when the next mark is actually upwind of you
+  const brg = angOf(goal.x-boat.x, goal.y-boat.y);
+  const beating = Math.abs(norm(windMean-brg))*R2D < 52;
+  if(showLaylines && beating){
+    const m={x:goal.x-cam.x,y:goal.y-cam.y};
+    ctx.setLineDash([9,9]); ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,214,107,.4)';
+    for(const sgn of [1,-1]){
+      const v=vecOf(windMean+Math.PI+sgn*45*D2R);
+      ctx.beginPath(); ctx.moveTo(m.x,m.y); ctx.lineTo(m.x+v.x*3000,m.y+v.y*3000); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  // every mark, gate and line on the course
+  course.forEach((c,i)=>{
+    const live = i===wp;
+    if(c.type==='mark'){ drawMark(c.x-cam.x, c.y-cam.y, c.name, live); return; }
+    const a={x:c.a.x-cam.x,y:c.a.y-cam.y}, b={x:c.b.x-cam.x,y:c.b.y-cam.y};
+    ctx.setLineDash([6,10]); ctx.lineWidth=2.5;
+    ctx.strokeStyle = live ? 'rgba(255,214,107,.65)' : 'rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
+    drawMark(a.x,a.y,c.name,live); drawMark(b.x,b.y,'',live);
+  });
+
+  for(const b of RIVALS) drawRival(b,cam);
+  drawBoat(boat.x-cam.x, boat.y-cam.y, d);
+  drawPointer(goal, cam, goal.name);
+  drawTrimView(); drawDetail(d); drawMap(); drawTrace(d); syncSheetKnob();
+
+  // true wind arrow, floating above the boat
+  ctx.save(); ctx.translate(boat.x-cam.x, boat.y-cam.y);
+  const tw=vecOf(wind.fromDir+Math.PI);
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-tw.x*118,-tw.y*118); ctx.lineTo(-tw.x*74,-tw.y*74); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.5)';
+  ctx.beginPath();
+  ctx.moveTo(-tw.x*64,-tw.y*64);
+  ctx.lineTo(-tw.x*80+tw.y*9,-tw.y*80-tw.x*9);
+  ctx.lineTo(-tw.x*80-tw.y*9,-tw.y*80+tw.x*9);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  const vmg=boat.spd*Math.cos(norm(angOf(goal.x-boat.x,goal.y-boat.y)-boat.hdg));
+  const reach = Math.min(POLAR_RAW(d.twa)*TUNING.trueWindKn, TUNING.maxBoatKn);  // possible right now
+  const frac  = reach>0.2 ? clamp(boat.spd/reach,0,1) : 0;
+  const col   = frac>0.92?'#3fb877':frac>0.75?'#ffd66b':'#f2683a';
+  spdFill.style.width=(clamp(boat.spd/TUNING.maxBoatKn,0,1)*64)+'px';
+  spdFill.style.background=col;
+  spdTick.style.left=(clamp(reach/TUNING.maxBoatKn,0,1)*64-1)+'px';
+  document.getElementById('iSpd').style.color=col;
+  set('iSpd',boat.spd.toFixed(1)); set('iVmg',vmg.toFixed(1));
+  set('iHeel',Math.round(Math.abs(boat.heel*R2D)));
+  set('iTwa',Math.round(Math.abs(d.twa))+(d.twa>=0?'S':'P'));
+  set('iDist',Math.round(Math.hypot(goal.x-boat.x,goal.y-boat.y)/TUNING.pxPerM));
+  set('iBrd',Math.round(boat.board*100));
+  set('legName', course[wp] ? course[wp].name : 'finish');
+  if(phase==='pre'){
+    const c=Math.ceil(countdown);
+    set('tElapsed', c>=60 ? fmt(countdown) : String(c));
+    set('clockLabel', c<=10 ? 'GUN IN' : 'START IN');
+  } else { set('tElapsed',fmt(raceTime)); set('clockLabel','Elapsed'); }
+  set('tBest',best===null?'—':fmt(best));
+  document.getElementById('tElapsed').style.color =
+    phase==='pre' ? (countdown<10?'#e04a45':countdown<30?'#ffd66b':'#fff') : '#fff';
+
+  // where you are in the fleet, by how far round the course everyone is
+  if(raceMode){
+    const prog=o=>{
+      const g=course[o.wp]||course[course.length-1];
+      return o.wp*1e6 - Math.hypot(g.x-o.x,g.y-o.y);
+    };
+    const all=[{wp,x:boat.x,y:boat.y,me:true},...RIVALS.map(b=>({wp:b.wp,x:b.x,y:b.y}))];
+    all.sort((a,b)=>prog(b)-prog(a));
+    set('posn', (all.findIndex(o=>o.me)+1)+' / '+all.length);
+  } else set('posn','—');
+
+  const pb=document.getElementById('penBadge');
+  if(pen>0){
+    pb.style.display='block';
+    pb.textContent = (pen>1?pen+' PENALTY TURNS':'PENALTY TURN')+
+      '  ·  '+Math.round(penTurn*R2D)+'° of 360';
+  } else if(ocs && phase==='racing'){
+    pb.style.display='block'; pb.textContent='OCS — you were over early, go back and start again';
+  } else pb.style.display='none';
+  document.getElementById('iVmg').style.color = vmg<0?'#e04a45':'#fff';
+  document.getElementById('iHeel').style.color =
+    Math.abs(boat.heel*R2D)>28?'#e04a45':Math.abs(boat.heel*R2D)>16?'#ffd66b':'#fff';
+
+  if(showCoach){ const [t,c]=coachText(d); coachEl.textContent=t; coachEl.style.color=c; }
+  requestAnimationFrame(frame);
+}
+const set=(id,v)=>{const e=document.getElementById(id); if(e.textContent!==String(v)) e.textContent=v;};
+const fmt=s=>`${Math.floor(s/60)}:${(s%60).toFixed(1).padStart(4,'0')}`;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
