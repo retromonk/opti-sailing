@@ -112,7 +112,7 @@
   .wcard .kn{font-family:"IBM Plex Mono",monospace;font-size:21px;margin:2px 0}
   .wcard .tp{font-size:10.5px;opacity:.7;line-height:1.35}
   .wcard .wv{font-size:12px;letter-spacing:2px;margin-top:3px;opacity:.65}
-  #modeList,#courseList,#shiftList{display:flex;gap:8px;justify-content:center;margin-top:4px}
+  #modeList,#fleetList,#courseList,#shiftList{display:flex;gap:8px;justify-content:center;margin-top:4px}
   .pill{cursor:pointer;font-size:13px;font-weight:500;padding:7px 16px;border-radius:999px;
     background:rgba(16,51,63,.65);border:2px solid rgba(255,255,255,.18);transition:all .12s}
   .pill.sel{background:var(--sun);color:var(--ink);border-color:var(--ink)}
@@ -242,11 +242,13 @@
     <div id="windList"></div>
     <p id="windNote"></p>
     <div id="modeList"></div>
+    <div id="fleetList" style="margin-top:8px"></div>
+    <p id="fleetNote" class="sub" style="margin:8px 0 0"></p>
     <div id="courseList" style="margin-top:10px"></div>
     <p id="courseNote" class="sub" style="margin:8px 0 12px"></p>
     <div id="shiftList"></div>
     <p id="shiftNote" class="sub" style="margin:8px 0 0"></p>
-    <p id="fsNote" class="sub" style="margin:6px 0 0;color:rgba(255,255,255,.4)"></p>
+    <p id="fsNote" class="sub" style="margin:8px 0 0;color:var(--sun);max-width:440px;margin-left:auto;margin-right:auto"></p>
     <div class="btns">
       <button id="goBtn">Go sailing</button>
       <button id="restartBtn" class="ghost">Restart run</button>
@@ -553,23 +555,34 @@ let penalty='', lastResult=null;
 let pen=0, penTurn=0, penDir=0, penPrevHdg=0, ocs=false, started=false, hitCool=0;
 
 const RIVAL_CFG=[
-  { n:'Mia',   c:'#e04a45', s:0.99, tactics:1.0 },
-  { n:'Diego', c:'#4a8fe0', s:0.95, tactics:0.7 },
-  { n:'Ruby',  c:'#8fd94a', s:0.91, tactics:0.4 }
+  // speed, how well they read shifts, how accurately they hit the line, favourite spot
+  { n:'Mia',   c:'#e04a45', s:0.99, tactics:1.0, start:0.5, lane:-19 },
+  { n:'Diego', c:'#4a8fe0', s:0.95, tactics:0.6, start:2.2, lane:-10 },
+  { n:'Ruby',  c:'#8fd94a', s:0.90, tactics:0.3, start:4.5, lane: 14 }
 ];
+const FLEETS=[
+  { name:'Learners', sp:0.88, tac:0.35, st:2.4, note:'slower, and they miss most of the shifts' },
+  { name:'Club',     sp:1.00, tac:1.00, st:1.0, note:'a normal club fleet — beatable, but they will punish mistakes' },
+  { name:'Sharp',    sp:1.05, tac:1.30, st:0.4, note:'fast, they tack on every header and they nail the start' }
+];
+let fleetPick=1;
 const RIVALS=[];
 
 function makeRivals(){
   RIVALS.length=0;
   if(!raceMode) return;
+  const F=FLEETS[fleetPick];
   const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
   const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
-  RIVAL_CFG.forEach((k,i)=>{
-    const v=(i-1)*13 + 7;                       // spread along the line
-    RIVALS.push({...k, lane:v,
-      x:(U.x*-16 + R.x*v)*P, y:(U.y*-16 + R.y*v)*P,
-      hdg:norm(dir-50*D2R), spd:0.8, wp:0, tack:1, cool:0, sides:{},
-      heel:0, fin:null, prevTwa:1});
+  RIVAL_CFG.forEach(k=>{
+    // how far off the gun they arrive: the sharp ones are close to spot on,
+    // the rest are early (and risk being over) or late
+    const err=(Math.random()*2-1)*k.start*F.st;
+    RIVALS.push({...k,
+      s:Math.min(k.s*F.sp,1.06), tactics:k.tactics*F.tac, startErr:err, judge:F.st*(k.start/2.2),
+      x:(U.x*-26 + R.x*k.lane)*P, y:(U.y*-26 + R.y*k.lane)*P,
+      hdg:norm(dir-50*D2R), spd:0.9, wp:0, tack:1, cool:0, sides:{},
+      heel:0, fin:null, prevTwa:1, started:false, ocs:false, hold:false });
   });
 }
 
@@ -598,7 +611,8 @@ function aiHeading(b,goal,w){
     else if(b.tack<0 && off< -43) b.tack= 1;
     else {
       const lift=norm(w.dir-windMean)*R2D*b.tack;
-      if(b.cool<=0 && lift < -4.5){ b.tack*=-1; b.cool=7; }   // tack on the header
+      const trig=-3.5/Math.max(0.25,b.tactics);              // sharp sailors tack on smaller headers
+      if(b.cool<=0 && lift < trig){ b.tack*=-1; b.cool=6; }   // tack on the header
     }
     return norm(w.dir - b.tack*44*D2R);
   }
@@ -616,12 +630,38 @@ function stepRival(b,dt){
   const w=windAt(b.x,b.y);
   let want;
   if(phase==='pre'){
-    // hover below the line and try to be there on the gun
     const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
     const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
-    const hold={x:(U.x*-7+R.x*b.lane)*P, y:(U.y*-7+R.y*b.lane)*P};
-    const far=Math.hypot(hold.x-b.x,hold.y-b.y);
-    want = far>6*P ? angOf(hold.x-b.x,hold.y-b.y) : norm(dir-90*D2R);
+
+    // over the line early? get back below it before the gun
+    const side=lineSide(startLine,b.x,b.y);
+    if(side!==startLine._s0) b.ocs=true;
+    else if(b.ocs) b.ocs=false;
+
+    if(b.ocs){
+      want = norm(dir+Math.PI);                       // bear away and dip back
+      b.hold=false;
+    } else {
+      // aim for a spot just short of the line in your lane, and work out
+      // whether you can afford to get there yet
+      const spot={x:(U.x*0.5+R.x*b.lane)*P, y:(U.y*0.5+R.y*b.lane)*P};
+      const togo=Math.hypot(spot.x-b.x,spot.y-b.y)/P;                    // metres
+      const cruise=Math.max(1.4, polarSpeed(48,windAt(b.x,b.y).spd)*b.s); // knots
+      // Allowance for turning round and rebuilding speed. Judging this well
+      // IS the skill of starting, so better sailors use a tighter number and
+      // arrive closer to the gun.
+      const need=togo/(cruise*KN)*(1.14+0.10*b.judge) + 1.4 + 2.1*b.judge;
+      const slack=countdown - need + b.startErr;
+      if(slack>0.4){
+        // too early — reach back and forth along the line to burn the time
+        b.hold=true;
+        want = norm(dir + (b.tack>0?-1:1)*105*D2R);
+        if(togo>34) b.tack*=-1;                        // turn back before drifting too far off
+      } else {
+        b.hold=false;                                   // time to go: accelerate at the line
+        want = angOf(spot.x-b.x, spot.y-b.y);
+      }
+    }
   } else {
     const goal=course[b.wp];
     if(!goal){ want=b.hdg; } else want=aiHeading(b,goal,w);
@@ -638,7 +678,7 @@ function stepRival(b,dt){
   b.prevTwa=twa||b.prevTwa;
 
   let tgt=polarSpeed(twa*R2D,w.spd)*b.s;
-  if(phase==='pre') tgt=Math.min(tgt,1.3);                 // no charging the line early
+  if(phase==='pre' && b.hold) tgt=Math.min(tgt,1.1);       // luffing along, killing time
   if(Math.abs(err)>0.5) tgt*=0.85;
   b.spd += (tgt-b.spd)*(1-Math.exp(-(tgt>b.spd?0.55:0.95)*dt/0.35));
   b.heel = lerp(b.heel, clamp(Math.sin(Math.abs(twa))*w.spd/22,0,0.5)*-Math.sign(twa||1), 1-Math.exp(-4*dt));
@@ -676,7 +716,7 @@ let traceT=0;
 
 function resetRun(){
   const {U,R,P}=buildCourse();
-  const sx=(U.x*-18 + R.x*-7)*P, sy=(U.y*-18 + R.y*-7)*P;   // below the start line
+  const sx=(U.x*-24 + R.x*2)*P, sy=(U.y*-24 + R.y*2)*P;   // below the line, in a clear lane
   const dir=TUNING.windFromDeg*D2R;
   Object.assign(boat,{x:sx,y:sy,hdg:norm(dir-50*D2R),spd:1.2,sheet:20*D2R,board:1,
     heel:0,heelV:0,pitch:0,pitchV:0,capsized:false,recover:0,spray:0});
@@ -778,6 +818,18 @@ function buildSetup(){
     el.addEventListener('click',()=>{ raceMode=on; buildSetup(); });
     ml.appendChild(el);
   });
+
+  const fl=document.getElementById('fleetList');
+  fl.innerHTML='';
+  FLEETS.forEach((f,i)=>{
+    const el=document.createElement('div');
+    el.className='pill'+(i===fleetPick?' sel':'');
+    el.textContent=f.name;
+    el.addEventListener('click',()=>{ fleetPick=i; buildSetup(); });
+    fl.appendChild(el);
+  });
+  document.getElementById('fleetList').style.display = raceMode?'flex':'none';
+  document.getElementById('fleetNote').textContent = raceMode ? 'Fleet: '+FLEETS[fleetPick].note+'.' : '';
 
   const cl=document.getElementById('courseList');
   cl.innerHTML='';
@@ -886,19 +938,21 @@ function toggleFullscreen(){
 }
 function updateFsButton(){
   const b=document.getElementById('fsBtn'), n=document.getElementById('fsNote');
-  if(isStandalone){
-    b.style.display='none';
-    n.textContent='Running as an app — already fullscreen.';
-  } else if(!fsSupported){
-    b.style.display='none';
-    n.textContent='For fullscreen on iPhone: tap Share, then Add to Home Screen.';
-  } else {
-    b.style.display='';
-    b.textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen';
-    n.textContent='';
-  }
+  b.style.display='';                       // always show it, whatever the platform
+  if(isStandalone){ b.textContent='⛶ Already fullscreen'; n.textContent=''; }
+  else if(!fsSupported) b.textContent='⛶ Fullscreen on iPhone';
+  else { b.textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen'; n.textContent=''; }
 }
-document.getElementById('fsBtn').addEventListener('click',()=>{ toggleFullscreen(); setTimeout(updateFsButton,150); });
+document.getElementById('fsBtn').addEventListener('click',()=>{
+  if(isStandalone){
+    document.getElementById('fsNote').textContent='You are already running it as an app.';
+  } else if(!fsSupported){
+    // iPhone Safari has no fullscreen mode, so say what does work instead
+    document.getElementById('fsNote').textContent=
+      'iPhone Safari cannot go fullscreen. Tap the Share button at the bottom of Safari, '+
+      'scroll down, and choose Add to Home Screen. Opening it from that icon runs fullscreen.';
+  } else { toggleFullscreen(); setTimeout(updateFsButton,150); }
+});
 document.addEventListener('fullscreenchange',()=>{ updateFsButton(); resize(); });
 document.addEventListener('webkitfullscreenchange',()=>{ updateFsButton(); resize(); });
 
