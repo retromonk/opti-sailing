@@ -201,7 +201,7 @@
   <b>Q</b> <b>E</b> daggerboard<br>
   <b>Shift</b> hike out &nbsp; <b>Z</b> lean in<br>
   <b>L</b> laylines &nbsp; <b>H</b> coach &nbsp; <b>R</b> restart<br>
-  <b>M</b> change the wind
+  <b>M</b> change the wind &nbsp; <b>F</b> fullscreen
 </div>
 
 <div class="panel hidden" id="padHint">
@@ -246,9 +246,11 @@
     <p id="courseNote" class="sub" style="margin:8px 0 12px"></p>
     <div id="shiftList"></div>
     <p id="shiftNote" class="sub" style="margin:8px 0 0"></p>
+    <p id="fsNote" class="sub" style="margin:6px 0 0;color:rgba(255,255,255,.4)"></p>
     <div class="btns">
       <button id="goBtn">Go sailing</button>
       <button id="restartBtn" class="ghost">Restart run</button>
+      <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
     </div>
   </div>
 </div>
@@ -798,8 +800,9 @@ function buildSetup(){
     sl.appendChild(el);
   });
   document.getElementById('shiftNote').textContent = 'Shifts: '+SHIFTS[shiftPick].note+'.';
+  if(typeof updateFsButton==='function') updateFsButton();
 }
-function openSetup(){ paused=true; buildSetup(); document.getElementById('setup').classList.remove('hidden'); }
+function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
 function closeSetup(){ applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
 /* ---------------- touch (iPhone / iPad) ----------------
@@ -866,11 +869,45 @@ function setupTouch(){
   document.addEventListener('gesturestart',e=>e.preventDefault());
 }
 setupTouch();
+/* ---------------- fullscreen ----------------
+   iPhone Safari has no Fullscreen API at all — only iPad and desktop do.
+   So on iPhone we point people at Add to Home Screen instead, which is
+   the only way to lose the browser chrome there. */
+const fsEl=document.documentElement;
+const fsSupported = !!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen);
+const isStandalone = navigator.standalone === true ||
+                     matchMedia('(display-mode: standalone)').matches;
+
+function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen(){
+  if(!fsSupported) return;
+  if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+  else { (fsEl.requestFullscreen||fsEl.webkitRequestFullscreen).call(fsEl); }
+}
+function updateFsButton(){
+  const b=document.getElementById('fsBtn'), n=document.getElementById('fsNote');
+  if(isStandalone){
+    b.style.display='none';
+    n.textContent='Running as an app — already fullscreen.';
+  } else if(!fsSupported){
+    b.style.display='none';
+    n.textContent='For fullscreen on iPhone: tap Share, then Add to Home Screen.';
+  } else {
+    b.style.display='';
+    b.textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen';
+    n.textContent='';
+  }
+}
+document.getElementById('fsBtn').addEventListener('click',()=>{ toggleFullscreen(); setTimeout(updateFsButton,150); });
+document.addEventListener('fullscreenchange',()=>{ updateFsButton(); resize(); });
+document.addEventListener('webkitfullscreenchange',()=>{ updateFsButton(); resize(); });
+
 document.getElementById('goBtn').addEventListener('click',closeSetup);
 document.getElementById('restartBtn').addEventListener('click',()=>{ resetRun(); closeSetup(); });
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='m') paused ? closeSetup() : openSetup();
+  if(k==='f') toggleFullscreen();
   if(k==='enter' && paused) closeSetup();
 });
 buildSetup();
