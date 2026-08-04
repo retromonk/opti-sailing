@@ -100,30 +100,44 @@
   /* an ID beats a class, so this rule has to be at least as specific as #setup */
   #setup.hidden{display:none}
   #setupCard{max-width:660px;width:100%;text-align:center}
-  #setupCard h1{font-size:27px;font-weight:600;margin:0 0 3px}
-  #setupCard .sub{color:rgba(255,255,255,.55);font-size:13px;margin:0 0 16px}
-  #windList{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
-  .wcard{flex:1 1 105px;max-width:125px;background:rgba(16,51,63,.65);cursor:pointer;
-    border:2px solid rgba(255,255,255,.18);border-radius:15px;padding:11px 8px;
-    transition:transform .12s,border-color .12s,background .12s}
-  .wcard:hover{transform:translateY(-3px)}
-  .wcard.sel{background:var(--sun);border-color:var(--ink);color:var(--ink);transform:translateY(-3px)}
-  .wcard .nm{font-size:14px;font-weight:600}
-  .wcard .kn{font-family:"IBM Plex Mono",monospace;font-size:21px;margin:2px 0}
-  .wcard .tp{font-size:10.5px;opacity:.7;line-height:1.35}
-  .wcard .wv{font-size:12px;letter-spacing:2px;margin-top:3px;opacity:.65}
-  #modeList,#fleetList,#courseList,#shiftList{display:flex;gap:8px;justify-content:center;margin-top:4px}
-  .pill{cursor:pointer;font-size:13px;font-weight:500;padding:7px 16px;border-radius:999px;
-    background:rgba(16,51,63,.65);border:2px solid rgba(255,255,255,.18);transition:all .12s}
-  .pill.sel{background:var(--sun);color:var(--ink);border-color:var(--ink)}
-  #windNote{min-height:34px;font-size:14px;color:rgba(255,255,255,.8);margin:14px 0 4px}
-  #setup .btns{display:flex;gap:10px;justify-content:center;margin-top:6px}
-  #setup button{font-family:Fredoka,sans-serif;font-weight:600;font-size:16px;color:var(--ink);
-    background:var(--sun);border:3px solid var(--ink);border-radius:16px;padding:11px 26px;
+  #setupCard h1{font-size:24px;font-weight:600;margin:0 0 3px}
+  #setupCard .sub{color:rgba(255,255,255,.6);font-size:13px;margin:0 0 14px;line-height:1.45}
+
+  #fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));gap:10px}
+  .field{text-align:left;min-width:0}
+  .field label{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);margin:0 0 5px 3px}
+  .sel-wrap{position:relative}
+  .sel-wrap::after{content:'▾';position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    pointer-events:none;color:var(--sun);font-size:13px}
+  #setup select{appearance:none;-webkit-appearance:none;width:100%;
+    font-family:Fredoka,sans-serif;font-size:15px;font-weight:500;color:#fff;
+    background:rgba(16,51,63,.8);border:2px solid rgba(255,255,255,.22);border-radius:12px;
+    padding:10px 30px 10px 13px;outline:none}
+  #setup select:focus{border-color:var(--sun)}
+  #setup option{background:#10333f;color:#fff}
+
+  #setup .btns{display:flex;gap:9px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  #setup button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);
+    background:var(--sun);border:3px solid var(--ink);border-radius:14px;padding:10px 24px;
     cursor:pointer;box-shadow:0 5px 0 rgba(6,28,36,.45)}
   #setup button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3);
-    box-shadow:none;font-weight:500;font-size:14px;padding:11px 18px}
+    box-shadow:none;font-weight:500;font-size:13px;padding:10px 15px}
   #setup button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
+  #fsNote{color:var(--sun)!important;margin:10px 0 0!important;min-height:0}
+
+  /* landscape phones are short, so tighten everything up */
+  @media (max-height:460px){
+    #setup{padding:10px}
+    #setupCard h1{font-size:19px;margin-bottom:1px}
+    #setupCard .sub{font-size:11.5px;margin-bottom:9px}
+    #fields{grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:7px}
+    #setup select{font-size:13.5px;padding:8px 26px 8px 11px;border-radius:10px}
+    .field label{font-size:9px;margin-bottom:3px}
+    #setup .btns{margin-top:10px}
+    #setup button{font-size:14px;padding:8px 20px}
+  }
+
   #course{cursor:pointer}
   #course .tap{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.1em;margin-top:5px}
 
@@ -224,39 +238,6 @@
   <div class="tap">TAP TO CHANGE WIND</div>
 </div>
 
-<div class="panel" id="windPanel">
-  <div class="row"><span class="label">Wind <b id="wDir">000</b>°</span><span class="label"><b id="wSpd">9.0</b> kn</span></div>
-  <canvas id="wTrace" width="164" height="54"></canvas>
-  <div class="num small" id="wShift">—</div>
-</div>
-
-<div class="panel hidden" id="results">
-  <div class="hd">Finish</div>
-  <div id="resultRows"></div>
-</div>
-
-<div id="setup">
-  <div id="setupCard">
-    <h1>Pick your day</h1>
-    <p class="sub">More wind means more speed, bigger waves, and a much easier capsize.</p>
-    <div id="windList"></div>
-    <p id="windNote"></p>
-    <div id="modeList"></div>
-    <div id="fleetList" style="margin-top:8px"></div>
-    <p id="fleetNote" class="sub" style="margin:8px 0 0"></p>
-    <div id="courseList" style="margin-top:10px"></div>
-    <p id="courseNote" class="sub" style="margin:8px 0 12px"></p>
-    <div id="shiftList"></div>
-    <p id="shiftNote" class="sub" style="margin:8px 0 0"></p>
-    <p id="fsNote" class="sub" style="margin:8px 0 0;color:var(--sun);max-width:440px;margin-left:auto;margin-right:auto"></p>
-    <div class="btns">
-      <button id="goBtn">Go sailing</button>
-      <button id="restartBtn" class="ghost">Restart run</button>
-      <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
-    </div>
-  </div>
-</div>
-
 <div id="dash">
   <div class="panel" style="position:static;padding:7px">
     <canvas id="miniMap" width="88" height="124"></canvas>
@@ -283,9 +264,47 @@
   </div>
 </div>
 
+<div class="panel" id="windPanel">
+  <div class="row"><span class="label">Wind <b id="wDir">000</b>°</span><span class="label"><b id="wSpd">9.0</b> kn</span></div>
+  <canvas id="wTrace" width="164" height="54"></canvas>
+  <div class="num small" id="wShift">—</div>
+</div>
+
+<div class="panel hidden" id="results">
+  <div class="hd">Finish</div>
+  <div id="resultRows"></div>
+</div>
+
+<div id="setup">
+  <div id="setupCard">
+    <h1>Set up your sail</h1>
+    <p class="sub" id="modeNote"></p>
+    <div id="fields">
+      <div class="field"><label>Game</label>
+        <div class="sel-wrap"><select id="selMode"></select></div></div>
+      <div class="field"><label>Wind</label>
+        <div class="sel-wrap"><select id="selWind"></select></div></div>
+      <div class="field"><label>Shifts</label>
+        <div class="sel-wrap"><select id="selShift"></select></div></div>
+      <div class="field"><label>Steering</label>
+        <div class="sel-wrap"><select id="selTiller"></select></div></div>
+      <div class="field" id="fCourse"><label>Course</label>
+        <div class="sel-wrap"><select id="selCourse"></select></div></div>
+      <div class="field" id="fFleet"><label>Fleet</label>
+        <div class="sel-wrap"><select id="selFleet"></select></div></div>
+    </div>
+    <p id="fsNote" class="sub"></p>
+    <div class="btns">
+      <button id="goBtn">Go sailing</button>
+      <button id="restartBtn" class="ghost">Restart</button>
+      <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
+    </div>
+  </div>
+</div>
+
 <div id="touch">
   <div class="pad" id="tiller">
-    <div id="tillerRail"></div><div id="tillerKnob"></div><span class="cap">TILLER</span>
+    <div id="tillerRail"></div><div id="tillerKnob"></div><span class="cap" id="tillerCap">TILLER</span>
   </div>
   <div class="pad" id="sheet">
     <div id="sheetFill"></div><div id="sheetKnob"></div>
@@ -520,7 +539,12 @@ const COURSES=[
     build:L=>[ M(L,0,'1'), M(L-10,-14,'1a'), M(L*0.52,-L*0.6,'2'),
                M(10,-L*0.6,'3'), LN(6,-L*0.3,'FINISH',20) ] }
 ];
-let coursePick=0;
+let coursePick=0;      // Windward-Leeward, the simplest
+/* A real tiller works backwards: push it to port and the boat turns to
+   starboard. The touch pad and the left stick ARE the tiller, so they get
+   the real sense by default. The keyboard keys stay plain turn-left and
+   turn-right, since a key is not a tiller. */
+let tillerInvert=true;
 let course=[], wp=0;
 let clock=0, running=false, best=null, simTime=0;
 
@@ -547,8 +571,8 @@ function buildCourse(){
 /* ============================================================
    THE RACE: a starting sequence, three rivals, and penalty turns
    ============================================================ */
-let gameMode='race';                       // 'race' | 'practice' | 'coins'
-let raceMode=true, coinMode=false;
+let gameMode='coins';                      // 'race' | 'practice' | 'coins'
+let raceMode=false, coinMode=true;
 function setMode(m){ gameMode=m; raceMode=(m==='race'); coinMode=(m==='coins'); }
 let phase='pre', countdown=0, raceTime=0;
 const START_SEC=60;
@@ -568,7 +592,7 @@ const FLEETS=[
   { name:'Club',     sp:1.00, tac:1.00, st:1.0, note:'a normal club fleet — beatable, but they will punish mistakes' },
   { name:'Sharp',    sp:1.05, tac:1.30, st:0.4, note:'fast, they tack on every header and they nail the start' }
 ];
-let fleetPick=1;
+let fleetPick=0;       // Learners
 const RIVALS=[];
 
 /* ============================================================
@@ -821,8 +845,8 @@ const SHIFTS = [
   { name:'Oscillating', g:1.0, note:'swings back and forth on a rhythm you can learn' },
   { name:'Tricky',      g:2.0, note:'big swings and hard puffs, anyone can win' }
 ];
-let shiftPick = 1;
-let windPick = 2;
+let shiftPick = 0;     // Steady
+let windPick = 1;      // Light, 7 kn — enough to move without fighting her
 
 function topSpeedFor(kn){
   const cap = clamp(3.2 + 0.10*kn, 3.2, 5.2);
@@ -853,68 +877,59 @@ function applyWind(i){
 
 /* ---------------- setup screen ---------------- */
 let paused = true;
+const SEL={};
 function buildSetup(){
-  const list=document.getElementById('windList');
-  list.innerHTML='';
-  WINDS.forEach((w,i)=>{
-    const el=document.createElement('div');
-    el.className='wcard'+(i===windPick?' sel':'');
-    el.innerHTML=`<div class="nm">${w.name}</div><div class="kn">${w.kn}</div>`+
-      `<div class="tp">knots of wind<br>tops out near ${topSpeedFor(w.kn).toFixed(1)} kn</div>`+
-      `<div class="wv">${'~'.repeat(Math.max(1,Math.round(w.kn/4)))}</div>`;
-    el.addEventListener('click',()=>{ windPick=i; buildSetup(); });
-    list.appendChild(el);
-  });
-  document.getElementById('windNote').textContent = WINDS[windPick].note;
+  SEL.mode   = SEL.mode   || document.getElementById('selMode');
+  SEL.wind   = SEL.wind   || document.getElementById('selWind');
+  SEL.shift  = SEL.shift  || document.getElementById('selShift');
+  SEL.course = SEL.course || document.getElementById('selCourse');
+  SEL.fleet  = SEL.fleet  || document.getElementById('selFleet');
+  SEL.tiller = SEL.tiller || document.getElementById('selTiller');
 
-  const ml=document.getElementById('modeList');
-  ml.innerHTML='';
-  [['Race 3 rivals','race'],['Coin run','coins'],['Practice alone','practice']].forEach(([label,m])=>{
-    const el=document.createElement('div');
-    el.className='pill'+(gameMode===m?' sel':'');
-    el.textContent=label;
-    el.addEventListener('click',()=>{ setMode(m); buildSetup(); });
-    ml.appendChild(el);
-  });
+  const fill=(el,items,idx)=>{
+    el.innerHTML=items.map((t,i)=>`<option value="${i}">${t}</option>`).join('');
+    el.value=String(idx);
+  };
+  fill(SEL.wind,  WINDS.map(w=>`${w.name} · ${w.kn} kn · to ${topSpeedFor(w.kn).toFixed(1)} kn`), windPick);
+  fill(SEL.shift, SHIFTS.map(x=>x.name), shiftPick);
+  fill(SEL.course,COURSES.map(c=>c.name), coursePick);
+  fill(SEL.fleet, FLEETS.map(f=>f.name), fleetPick);
 
-  const fl=document.getElementById('fleetList');
-  fl.innerHTML='';
-  FLEETS.forEach((f,i)=>{
-    const el=document.createElement('div');
-    el.className='pill'+(i===fleetPick?' sel':'');
-    el.textContent=f.name;
-    el.addEventListener('click',()=>{ fleetPick=i; buildSetup(); });
-    fl.appendChild(el);
-  });
-  document.getElementById('fleetList').style.display = raceMode?'flex':'none';
-  document.getElementById('fleetNote').textContent = raceMode ? 'Fleet: '+FLEETS[fleetPick].note+'.' : '';
+  SEL.mode.innerHTML =
+    '<option value="coins">Coin run</option>'+
+    '<option value="race">Race 3 rivals</option>'+
+    '<option value="practice">Practice alone</option>';
+  SEL.mode.value=gameMode;
 
-  const cl=document.getElementById('courseList');
-  cl.innerHTML='';
-  COURSES.forEach((c,i)=>{
-    const el=document.createElement('div');
-    el.className='pill'+(i===coursePick?' sel':'');
-    el.textContent=c.short;
-    el.addEventListener('click',()=>{ coursePick=i; buildSetup(); });
-    cl.appendChild(el);
-  });
-  document.getElementById('courseNote').textContent = coinMode
-    ? 'Coin run: '+COIN_SEC+' seconds to collect as much as you can. Coins further upwind are worth more, because getting there costs you a beat. Watch the clock and pick your route.'
-    : COURSES[coursePick].note;
-  document.getElementById('courseList').style.display = coinMode?'none':'flex';
+  SEL.tiller.innerHTML =
+    '<option value="1">Tiller — push away to turn</option>'+
+    '<option value="0">Direct — steer where you point</option>';
+  SEL.tiller.value = tillerInvert?'1':'0';
 
-  const sl=document.getElementById('shiftList');
-  sl.innerHTML='';
-  SHIFTS.forEach((sh,i)=>{
-    const el=document.createElement('div');
-    el.className='pill'+(i===shiftPick?' sel':'');
-    el.textContent=sh.name;
-    el.addEventListener('click',()=>{ shiftPick=i; buildSetup(); });
-    sl.appendChild(el);
-  });
-  document.getElementById('shiftNote').textContent = 'Shifts: '+SHIFTS[shiftPick].note+'.';
+  // only show the settings that apply to the game you picked
+  document.getElementById('fCourse').style.display = coinMode?'none':'';
+  document.getElementById('fFleet').style.display  = raceMode?'':'none';
+
+  document.getElementById('modeNote').textContent =
+    coinMode ? COIN_SEC+' seconds to collect as much as you can. Coins further upwind are worth more.'
+  : raceMode ? 'Start with the fleet, race the course, keep clear of the other boats.'
+             : 'Sail the course on your own, at your own pace.';
+
+  document.getElementById('tillerCap').textContent = tillerInvert ? 'TILLER · PUSH AWAY' : 'STEER';
   if(typeof updateFsButton==='function') updateFsButton();
 }
+
+// the dropdowns only need wiring up once
+function wireSetup(){
+  const on=(el,fn)=>el.addEventListener('change',e=>{ fn(e.target.value); buildSetup(); });
+  on(document.getElementById('selMode'),   v=>setMode(v));
+  on(document.getElementById('selWind'),   v=>{ windPick=+v; });
+  on(document.getElementById('selShift'),  v=>{ shiftPick=+v; });
+  on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
+  on(document.getElementById('selFleet'),  v=>{ fleetPick=+v; });
+  on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; });
+}
+
 function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
 function closeSetup(){ applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
@@ -1025,6 +1040,7 @@ addEventListener('keydown',e=>{
   if(k==='f') toggleFullscreen();
   if(k==='enter' && paused) closeSetup();
 });
+wireSetup();
 buildSetup();
 
 /* keep the sheet handle in step with the boat, however it was moved */
@@ -1130,7 +1146,7 @@ function step(dt){
   }
 
   /* --- steering --- */
-  let steer=pad.steer+touch.steer;
+  let steer=(pad.steer+touch.steer)*(tillerInvert?-1:1);
   if(down('a','arrowleft'))steer-=1;
   if(down('d','arrowright'))steer+=1;
   steer=clamp(steer,-1,1);
