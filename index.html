@@ -409,8 +409,6 @@
         <div class="sel-wrap"><select id="selSound"></select></div></div>
       <div class="field" id="fCourse"><label>Course</label>
         <div class="sel-wrap"><select id="selCourse"></select></div></div>
-      <div class="field" id="fFleet"><label>Fleet</label>
-        <div class="sel-wrap"><select id="selFleet"></select></div></div>
     </div>
     <p id="windNote" class="sub"></p>
     <p id="fsNote" class="sub"></p>
@@ -795,7 +793,7 @@ function buildCourse(){
 }
 
 /* ============================================================
-   THE RACE: a starting sequence, three rivals, and penalty turns
+   THE RACE: a starting sequence, the course, and penalty turns
    ============================================================ */
 let gameMode='coins';                      // 'race' | 'practice' | 'coins'
 let raceMode=false, coinMode=true;
@@ -807,19 +805,6 @@ let startLine=null;
 let penalty='', lastResult=null;
 let pen=0, penTurn=0, penDir=0, penPrevHdg=0, ocs=false, started=false, hitCool=0;
 
-const RIVAL_CFG=[
-  // speed, how well they read shifts, how accurately they hit the line, favourite spot
-  { n:'Mia',   c:'#e04a45', s:0.99, tactics:1.0, start:0.5, lane:-19 },
-  { n:'Diego', c:'#4a8fe0', s:0.95, tactics:0.6, start:2.2, lane:-10 },
-  { n:'Ruby',  c:'#8fd94a', s:0.90, tactics:0.3, start:4.5, lane: 14 }
-];
-const FLEETS=[
-  { name:'Learners', sp:0.88, tac:0.35, st:2.4, note:'slower, and they miss most of the shifts' },
-  { name:'Club',     sp:1.00, tac:1.00, st:1.0, note:'a normal club fleet — beatable, but they will punish mistakes' },
-  { name:'Sharp',    sp:1.05, tac:1.30, st:0.4, note:'fast, they tack on every header and they nail the start' }
-];
-let fleetPick=0;       // Learners
-const RIVALS=[];
 
 /* ============================================================
    COIN RUN
@@ -1057,133 +1042,13 @@ addEventListener('keydown',()=>SFX.unlock(),{once:false});
 function coinsLeft(){ return COINS.filter(c=>!c.got); }
 function coinTotal(){ return COINS.reduce((a,c)=>a+c.v,0); }
 
-function makeRivals(){
-  RIVALS.length=0;
-  if(!raceMode) return;
-  const F=FLEETS[fleetPick];
-  const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
-  const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
-  RIVAL_CFG.forEach(k=>{
-    // how far off the gun they arrive: the sharp ones are close to spot on,
-    // the rest are early (and risk being over) or late
-    const err=(Math.random()*2-1)*k.start*F.st;
-    RIVALS.push({...k,
-      s:Math.min(k.s*F.sp,1.06), tactics:k.tactics*F.tac, startErr:err, judge:F.st*(k.start/2.2),
-      x:(U.x*-26 + R.x*k.lane)*P, y:(U.y*-26 + R.y*k.lane)*P,
-      hdg:norm(dir-50*D2R), spd:0.9, wp:0, tack:1, cool:0, sides:{},
-      heel:0, fin:null, prevTwa:1, started:false, ocs:false, hold:false });
-  });
-}
 
 /* Which side of a line you are on. Crossing is a change of sign. */
 function lineSide(k,x,y){
   return Math.sign((k.b.x-k.a.x)*(y-k.a.y)-(k.b.y-k.a.y)*(x-k.a.x));
 }
-function reachedBy(b,k,i){
-  if(k.type==='mark') return Math.hypot(b.x-k.x,b.y-k.y) < TUNING.markRadiusM*TUNING.pxPerM;
-  const dx=k.b.x-k.a.x, dy=k.b.y-k.a.y;
-  const t=((b.x-k.a.x)*dx+(b.y-k.a.y)*dy)/(dx*dx+dy*dy);
-  const side=lineSide(k,b.x,b.y), prev=b.sides[i];
-  b.sides[i]=side;
-  return prev!==undefined && prev!==0 && side!==0 && side!==prev && t>0 && t<1;
-}
 
-/* ---- how a rival decides where to point ----
-   Upwind she sails close-hauled and tacks on the laylines, and the
-   sharper ones also tack when the wind heads them. Downwind she picks
-   the gybe that aims nearer the mark. Everywhere else, straight at it. */
-function aiHeading(b,goal,w){
-  const brg=angOf(goal.x-b.x, goal.y-b.y);
-  const off=norm(brg-w.dir)*R2D;            // where the mark sits either side of the wind
-  if(Math.abs(off)<44){                     // it is a beat
-    if(b.tack>0 && off> 43) b.tack=-1;      // on the layline, tack for the mark
-    else if(b.tack<0 && off< -43) b.tack= 1;
-    else {
-      const lift=norm(w.dir-windMean)*R2D*b.tack;
-      const trig=-3.5/Math.max(0.25,b.tactics);              // sharp sailors tack on smaller headers
-      if(b.cool<=0 && lift < trig){ b.tack*=-1; b.cool=6; }   // tack on the header
-    }
-    return norm(w.dir - b.tack*44*D2R);
-  }
-  if(Math.abs(off)>150){                    // dead downwind, so pick a gybe
-    const g1=norm(w.dir+Math.PI-28*D2R), g2=norm(w.dir+Math.PI+28*D2R);
-    const better = Math.abs(norm(g1-brg))<Math.abs(norm(g2-brg));
-    b.tack = better?1:-1;
-    return better?g1:g2;
-  }
-  return brg;
-}
 
-function stepRival(b,dt){
-  b.cool-=dt;
-  const w=windAt(b.x,b.y);
-  let want;
-  if(phase==='pre'){
-    const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
-    const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
-
-    // over the line early? get back below it before the gun
-    const side=lineSide(startLine,b.x,b.y);
-    if(side!==startLine._s0) b.ocs=true;
-    else if(b.ocs) b.ocs=false;
-
-    if(b.ocs){
-      want = norm(dir+Math.PI);                       // bear away and dip back
-      b.hold=false;
-    } else {
-      // aim for a spot just short of the line in your lane, and work out
-      // whether you can afford to get there yet
-      const spot={x:(U.x*0.5+R.x*b.lane)*P, y:(U.y*0.5+R.y*b.lane)*P};
-      const togo=Math.hypot(spot.x-b.x,spot.y-b.y)/P;                    // metres
-      const cruise=Math.max(1.4, polarSpeed(48,windAt(b.x,b.y).spd)*b.s); // knots
-      // Allowance for turning round and rebuilding speed. Judging this well
-      // IS the skill of starting, so better sailors use a tighter number and
-      // arrive closer to the gun.
-      const need=togo/(cruise*KN)*(1.14+0.10*b.judge) + 1.4 + 2.1*b.judge;
-      const slack=countdown - need + b.startErr;
-      if(slack>0.4){
-        // too early — reach back and forth along the line to burn the time
-        b.hold=true;
-        want = norm(dir + (b.tack>0?-1:1)*105*D2R);
-        if(togo>34) b.tack*=-1;                        // turn back before drifting too far off
-      } else {
-        b.hold=false;                                   // time to go: accelerate at the line
-        want = angOf(spot.x-b.x, spot.y-b.y);
-      }
-    }
-  } else {
-    const goal=course[b.wp];
-    if(!goal){ want=b.hdg; } else want=aiHeading(b,goal,w);
-  }
-
-  // turn toward it, with no real steering when she is stopped
-  const err=norm(want-b.hdg);
-  const rate=(TUNING.turnRateDeg*D2R)*clamp(0.25+b.spd/1.2,0,1)*dt;
-  b.hdg=norm(b.hdg+clamp(err,-rate,rate));
-
-  const twa=norm(w.dir-b.hdg);
-  if(Math.sign(twa)!==Math.sign(b.prevTwa))
-    b.spd *= Math.abs(b.prevTwa)*R2D>120 ? 0.88 : 0.90;   // gybes cost more than tacks
-  b.prevTwa=twa||b.prevTwa;
-
-  let tgt=polarSpeed(twa*R2D,w.spd)*b.s;
-  if(phase==='pre' && b.hold) tgt=Math.min(tgt,1.1);       // luffing along, killing time
-  if(Math.abs(err)>0.5) tgt*=0.85;
-  b.spd += (tgt-b.spd)*(1-Math.exp(-TUNING.accelPerSec*dt/0.35));
-  b.heel = lerp(b.heel, clamp(Math.sin(Math.abs(twa))*w.spd/22,0,0.5)*-Math.sign(twa||1), 1-Math.exp(-4*dt));
-
-  const k=KN*TUNING.pxPerM*dt, hv=vecOf(b.hdg);
-  b.x+=hv.x*b.spd*k; b.y+=hv.y*b.spd*k;
-
-  if(phase==='racing' && b.fin===null){
-    if(!b.started){ if(reachedBy(b,startLine,'start')) b.started=true; }
-    const g=course[b.wp];
-    if(g && reachedBy(b,g,b.wp)){
-      b.wp++;
-      if(b.wp>=course.length) b.fin=raceTime;
-    }
-  }
-}
 
 /* Lines remember which side you were on last frame, and a crossing is a
    change of side. That reading has to be kept fresh on EVERY line, not just
@@ -1194,10 +1059,6 @@ function refreshSides(){
   course.forEach((k,i)=>{
     if(k.type!=='mark' && i!==wp) k._s=lineSide(k,boat.x,boat.y);
   });
-  for(const b of RIVALS)
-    course.forEach((k,i)=>{
-      if(k.type!=='mark' && i!==b.wp) b.sides[i]=lineSide(k,b.x,b.y);
-    });
 }
 
 /* Marks you round by getting close enough. Gates and lines you have to
@@ -1230,13 +1091,11 @@ function resetRun(){
   if(coinMode) seedCoins();
   raceTime=0; pen=0; penTurn=0; penDir=0; penPrevHdg=boat.hdg;
   ocs=false; started=!raceMode; hitCool=0;
-  makeRivals();
   windBase.dir=dir; windMean=dir; shiftDeg=0;
   wind.fromDir=dir; wind.spdKn=TUNING.trueWindKn;
   trace.length=0; TRACK.length=0; seedPuffs(); seedScenery();
   course.forEach(k=>{ if(k.type!=='mark'){ k._s=undefined; reached(k); } });  // prime the line crossings
   startLine._s=undefined; reached(startLine); startLine._s0=startLine._s;
-  RIVALS.forEach(b=>{ b.sides={}; b.started=false; reachedBy(b,startLine,'start'); });
 }
 resetRun();
 
@@ -1301,7 +1160,6 @@ function buildSetup(){
   SEL.wind   = SEL.wind   || document.getElementById('selWind');
   SEL.shift  = SEL.shift  || document.getElementById('selShift');
   SEL.course = SEL.course || document.getElementById('selCourse');
-  SEL.fleet  = SEL.fleet  || document.getElementById('selFleet');
   SEL.tiller = SEL.tiller || document.getElementById('selTiller');
   SEL.assist = SEL.assist || document.getElementById('selAssist');
   SEL.sound  = SEL.sound  || document.getElementById('selSound');
@@ -1313,11 +1171,10 @@ function buildSetup(){
   fill(SEL.wind,  WINDS.map(w=>`${w.name} · ${w.kn} kn`), windPick);
   fill(SEL.shift, SHIFTS.map(x=>x.name), shiftPick);
   fill(SEL.course,COURSES.map(c=>c.name), coursePick);
-  fill(SEL.fleet, FLEETS.map(f=>f.name), fleetPick);
 
   SEL.mode.innerHTML =
     '<option value="coins">Coin run</option>'+
-    '<option value="race">Race 3 rivals</option>'+
+    '<option value="race">Time trial · start gun</option>'+
     '<option value="practice">Practice alone</option>';
   SEL.mode.value=gameMode;
 
@@ -1334,11 +1191,10 @@ function buildSetup(){
 
   // only show the settings that apply to the game you picked
   document.getElementById('fCourse').style.display = coinMode?'none':'';
-  document.getElementById('fFleet').style.display  = raceMode?'':'none';
 
   document.getElementById('modeNote').textContent =
     coinMode ? COIN_SEC+' seconds to collect as much as you can. Coins further upwind are worth more.'
-  : raceMode ? 'Start with the fleet, race the course, keep clear of the other boats.'
+  : raceMode ? 'One minute to the gun. Hit the line at speed, race the course against the clock.'
              : 'Sail the course on your own, at your own pace.';
 
   document.getElementById('tillerCap').textContent = tillerInvert ? 'TILLER · PUSH AWAY' : 'STEER';
@@ -1355,7 +1211,6 @@ function wireSetup(){
   on(document.getElementById('selWind'),   v=>{ windPick=+v; });
   on(document.getElementById('selShift'),  v=>{ shiftPick=+v; });
   on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
-  on(document.getElementById('selFleet'),  v=>{ fleetPick=+v; });
   on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; try{ localStorage.setItem('opti-tiller',v); }catch(e){} });
   on(document.getElementById('selSound'),  v=>{ soundOn = v==='1'; try{ localStorage.setItem('opti-sound',v); }catch(e){} });
   on(document.getElementById('selAssist'), v=>{ assist = v==='1'; document.body.classList.toggle('assist',assist);
@@ -1509,13 +1364,12 @@ function showCoinResults(){
 
 function showResults(){
   if(!lastResult) return;
-  const rows=[{n:'You',c:'#ffd66b',t:lastResult.me,me:true},
-              ...lastResult.rivals.map(r=>({...r,t:r.t}))]
-    .sort((a,b)=>(a.t===null?1e9:a.t)-(b.t===null?1e9:b.t));
-  showPanel(rows.map((r,i)=>
-    `<div class="rr${r.me?' me':''}"><span>${i+1}. ${r.n}${
-      r.me&&lastResult.pen?' (+'+lastResult.pen*30+'s)':''}</span>`+
-    `<span class="t">${r.t===null?'still racing':fmt(r.t)}</span></div>`).join(''));
+  const r=lastResult;
+  showPanel(
+    `<div class="rr me"><span>Your time</span><span class="t">${fmt(r.me)}</span></div>`+
+    (r.pen?`<div class="rr"><span>Unserved turns</span><span class="t">+${r.pen*30}s</span></div>`:'')+
+    `<div class="rr"><span>Best</span><span class="t">${fmt(best)}</span></div>`+
+    (r.me<=best?`<div class="rr"><span>New best!</span><span class="t">★</span></div>`:''));
 }
 
 /* ---------------- gamepad ---------------- */
@@ -1757,7 +1611,7 @@ function howtoCards(){
     `<div class="ht"><h2>4 · Keep her flat</h2>Hike out with ${K.hike} when the heel passes about 10°. A heeled boat is a slow boat, and past 54° she goes over. Ease the sheet in a big gust.</div>`,
     `<div class="ht"><h2>5 · Downwind</h2>Run straight down the wind — it is the fastest way home in an Opti. Pull the daggerboard up with ${K.up} (and back down with ${K.down} before you turn upwind).</div>`,
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
-    `<div class="ht"><h2>7 · Racing</h2>Cross the start line after the gun, round the marks in order, keep clear of the other boats. Touching a mark or a rival costs a penalty turn. Laylines: <b>L</b>. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
+    `<div class="ht"><h2>7 · Racing</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn. Laylines: <b>L</b>. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
   ].join('');
 }
 function openHowto(){
@@ -1994,7 +1848,7 @@ function step(dt){
     }
 
     /* ---- penalty turns ----
-       Touch a mark or hit a rival and you owe a turn: a full circle,
+       Touch a mark and you owe a turn: a full circle,
        sailed before you finish, or thirty seconds added to your time. */
     hitCool-=dt;
     if(phase==='racing' && hitCool<=0){
@@ -2004,16 +1858,6 @@ function step(dt){
         for(const q of pts)
           if(Math.hypot(boat.x-q.x,boat.y-q.y) < touch+14){ pen++; hitCool=3; penalty='mark'; break; }
         if(hitCool>0) break;
-      }
-      for(const b of RIVALS){
-        if(Math.hypot(boat.x-b.x,boat.y-b.y) < 3.2*TUNING.pxPerM){
-          // starboard tack has right of way; on the same tack the windward boat keeps clear
-          const myTack=telltale.sheetSign, hisTack=Math.sign(norm(wind.fromDir-b.hdg))||1;
-          const mine = myTack!==hisTack ? myTack<0        // port tack gives way
-                     : lineSide({a:{x:b.x,y:b.y},b:{x:b.x+Math.sin(b.hdg),y:b.y-Math.cos(b.hdg)}},boat.x,boat.y)===myTack;
-          if(mine){ pen++; penalty='foul'; }
-          boat.spd*=0.6; hitCool=3; break;
-        }
       }
     }
     if(pen>0){
@@ -2025,8 +1869,6 @@ function step(dt){
       }
     } else { penPrevHdg=boat.hdg; penTurn=0; penDir=0; }
 
-    /* ---- the rivals ---- */
-    for(const b of RIVALS) stepRival(b,dt);
     refreshSides();
 
     /* ---- your own progress ---- */
@@ -2036,8 +1878,7 @@ function step(dt){
       if(wp>=course.length){                      // across the finish line
         const t=raceTime + pen*30;                // unserved turns cost you thirty seconds each
         if(best===null||t<best) best=t;
-        lastResult={ me:t, pen, at:simTime,
-                     rivals:RIVALS.map(b=>({n:b.n,c:b.c,t:b.fin})) };
+        lastResult={ me:t, pen, at:simTime };
         showResults();
         resetRun();
       }
@@ -2249,38 +2090,6 @@ function drawCoins(cam){
   }
 }
 
-function drawRival(b,cam){
-  const x=b.x-cam.x, y=b.y-cam.y;
-  if(x<-70||y<-70||x>W+70||y>H+70) return;
-  const L=2.3*TUNING.pxPerM*2.1, beam=Math.max(.45,Math.cos(b.heel*2)), lee=-Math.sign(b.heel||1);
-  ctx.save(); ctx.translate(x,y);
-  ctx.fillStyle='rgba(8,50,66,.22)';
-  ctx.beginPath(); ctx.ellipse(0,3,L*0.34,L*0.5,b.hdg,0,7); ctx.fill();
-  ctx.rotate(b.hdg);
-  if(b.spd>0.8){
-    ctx.strokeStyle='rgba(223,244,248,.16)'; ctx.lineWidth=2.5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(-L*.24,L*.42); ctx.lineTo(-L*.5,L*1.1+b.spd*5);
-    ctx.moveTo(L*.24,L*.42); ctx.lineTo(L*.5,L*1.1+b.spd*5); ctx.stroke();
-  }
-  roundHull(ctx,L,beam,0,1,0);
-  ctx.fillStyle=C.hull; ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.stroke();
-  // sail, out on the leeward side
-  const twa=norm(wind.fromDir-b.hdg), side=twa>=0?1:-1;
-  const sheet=clamp((Math.abs(twa)-17*D2R),0,88*D2R);
-  const base={x:0,y:-L*0.34}, tip={x:lee*Math.sin(b.heel)*L*0.9, y:base.y};
-  const ba=Math.PI+sheet*side, bl=L*0.78;
-  ctx.strokeStyle=b.c; ctx.lineWidth=5; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(tip.x,tip.y);
-  ctx.quadraticCurveTo(tip.x+Math.sin(ba)*bl*0.5+Math.cos(ba)*side*bl*0.2,
-                       tip.y-Math.cos(ba)*bl*0.5+Math.sin(ba)*side*bl*0.2,
-                       tip.x+Math.sin(ba)*bl, tip.y-Math.cos(ba)*bl);
-  ctx.stroke();
-  ctx.fillStyle=C.vest; ctx.beginPath(); ctx.arc(-lee*L*0.16,L*0.08,L*0.1,0,7); ctx.fill();
-  ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.stroke();
-  ctx.restore();
-  ctx.fillStyle='rgba(255,255,255,.75)'; ctx.font='600 11px Fredoka,sans-serif'; ctx.textAlign='center';
-  ctx.fillText(b.n + (b.fin!==null?' ✓':''), x, y-L*0.72);
-}
 
 function drawCapsized(L,lee){
   ctx.fillStyle='rgba(255,250,240,.35)';
@@ -2648,10 +2457,6 @@ function drawMap(){
       mctx.beginPath(); mctx.arc(X(c.x),Y(c.y),r,0,7); mctx.fill(); mctx.stroke();
     }
   }
-  for(const b of RIVALS){
-    mctx.fillStyle=b.c;
-    mctx.beginPath(); mctx.arc(X(b.x),Y(b.y),2.6,0,7); mctx.fill();
-  }
   mctx.save(); mctx.translate(X(boat.x),Y(boat.y)); mctx.rotate(boat.hdg);
   mctx.fillStyle='#fff'; mctx.beginPath();
   mctx.moveTo(0,-6); mctx.lineTo(4,5); mctx.lineTo(-4,5); mctx.closePath(); mctx.fill();
@@ -2746,7 +2551,6 @@ function frame(now){
   });
 
   if(coinMode) drawCoins(cam);
-  for(const b of RIVALS) drawRival(b,cam);
   drawBoat(boat.x-cam.x, boat.y-cam.y, d);
   drawCheers(cam);
   if(coinMode){
@@ -2806,17 +2610,7 @@ function frame(now){
   document.getElementById('tElapsed').style.color =
     phase==='pre' ? (countdown<10?'#e04a45':countdown<30?'#ffd66b':'#fff') : '#fff';
 
-  // where you are in the fleet, by how far round the course everyone is
-  if(coinMode){ /* the score is already on screen */ }
-  else if(raceMode){
-    const prog=o=>{
-      const g=course[o.wp]||course[course.length-1];
-      return o.wp*1e6 - Math.hypot(g.x-o.x,g.y-o.y);
-    };
-    const all=[{wp,x:boat.x,y:boat.y,me:true},...RIVALS.map(b=>({wp:b.wp,x:b.x,y:b.y}))];
-    all.sort((a,b)=>prog(b)-prog(a));
-    set('posn', (all.findIndex(o=>o.me)+1)+' / '+all.length);
-  } else set('posn','—');
+  if(!coinMode){ set('posnLabel','Marks'); set('posn', Math.min(wp,course.length)+' / '+course.length); }
 
   const pb=document.getElementById('penBadge');
   if(pen>0){
