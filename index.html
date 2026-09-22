@@ -754,21 +754,72 @@ const RIVALS=[];
 const COIN_SEC=90;
 const COINS=[]; let coinPops=[];
 let coinTime=0, coinScore=0, bestCoins=0;
+let coinLayout='', COIN_PATH=[];          // the course shape the coins trace, for the mini map
+
+/* Coins are laid along the legs of the courses clubs actually sail, set
+   to the wind: a beat of tacks up to a windward gate, then reaches and a
+   run home. Upwind coins pay 3, reaching 2, running 1 — the beat is the
+   expensive part, so the route you pick is still the whole game.
+   Coordinates are metres: u upwind from the start, v across the course. */
+const COIN_LAYOUTS = [
+  { name:'Windward–Leeward', legs:[
+      { kind:'beat',  from:[-16,0], to:[46,0] },
+      { kind:'gate',  at:[50,0], val:3 },
+      { kind:'run',   from:[44,0], to:[-4,0] },
+      { kind:'gate',  at:[-8,0], val:2 } ] },
+  { name:'Olympic triangle', legs:[
+      { kind:'beat',  from:[-16,0], to:[46,0] },
+      { kind:'gate',  at:[50,0], val:3 },
+      { kind:'reach', from:[44,4], to:[22,38] },
+      { kind:'reach', from:[18,36], to:[-4,4] },
+      { kind:'gate',  at:[-8,0], val:2 } ] },
+  { name:'Trapezoid', legs:[
+      { kind:'beat',  from:[-16,0], to:[46,0] },
+      { kind:'gate',  at:[50,0], val:3 },
+      { kind:'reach', from:[46,5], to:[38,32] },
+      { kind:'run',   from:[33,34], to:[-4,34] },
+      { kind:'reach', from:[-8,30], to:[-10,4] } ] }
+];
 
 function seedCoins(){
-  COINS.length=0; coinPops=[]; coinScore=0; coinTime=COIN_SEC;
+  COINS.length=0; coinPops=[]; coinScore=0; coinTime=COIN_SEC; COIN_PATH=[];
   const P=TUNING.pxPerM, dir=TUNING.windFromDeg*D2R;
   const U=vecOf(dir), R={x:Math.cos(dir),y:Math.sin(dir)};
-  const put=(u,v)=>{
-    const val = u<45 ? 1 : u<105 ? 2 : 3;      // upwind coins are worth more
-    COINS.push({ x:(U.x*u+R.x*v)*P, y:(U.y*u+R.y*v)*P, v:val, got:false, ph:Math.random()*6.3 });
+  const side=Math.random()<0.5?1:-1;                 // mirror the course half the time
+  const toPx=(u,v)=>({x:(U.x*u+R.x*v*side)*P, y:(U.y*u+R.y*v*side)*P});
+  const put=(u,v,val)=>{
+    const q=toPx(u+(Math.random()*2-1)*1.5, v+(Math.random()*2-1)*1.5);
+    COINS.push({ x:q.x, y:q.y, v:val, got:false, ph:Math.random()*6.3 });
   };
-  for(let c=0;c<7;c++){                         // clusters, so a good route pays
-    const cu=-5+Math.random()*160, cv=(Math.random()*2-1)*68;
-    const n=2+Math.floor(Math.random()*3);
-    for(let i=0;i<n;i++) put(cu+(Math.random()*2-1)*13, cv+(Math.random()*2-1)*13);
+  const along=(a,b,step,val)=>{
+    const L=Math.hypot(b[0]-a[0],b[1]-a[1]), n=Math.max(1,Math.round(L/step));
+    for(let i=1;i<=n;i++){ const t=i/n; put(lerp(a[0],b[0],t), lerp(a[1],b[1],t), val); }
+  };
+  const layout=COIN_LAYOUTS[Math.floor(Math.random()*COIN_LAYOUTS.length)];
+  coinLayout=layout.name;
+  for(const leg of layout.legs){
+    if(leg.kind==='gate'){                            // a coin either side of the mark
+      put(leg.at[0],leg.at[1]-6,leg.val); put(leg.at[0],leg.at[1]+6,leg.val);
+      COIN_PATH.push(toPx(leg.at[0],leg.at[1]));
+      continue;
+    }
+    COIN_PATH.push(toPx(leg.from[0],leg.from[1]));
+    if(leg.kind==='beat'){
+      // you cannot sail straight upwind, so the coins zigzag up the beat
+      // in 45° tacks, and a boat working the shifts sails right through them
+      const [u0,v0]=leg.from, u1=leg.to[0], hop=15;
+      let u=u0, v=v0, dv=side;
+      while(u<u1){
+        const nu=Math.min(u1,u+hop), nv=v+dv*(nu-u);
+        along([u,v],[nu,nv],7.5,3);
+        COIN_PATH.push(toPx(nu,nv));
+        u=nu; v=nv; dv=-dv;
+      }
+    } else {
+      along(leg.from,leg.to, leg.kind==='run'?9:8, leg.kind==='run'?1:2);
+      COIN_PATH.push(toPx(leg.to[0],leg.to[1]));
+    }
   }
-  for(let i=0;i<5;i++) put(-10+Math.random()*175,(Math.random()*2-1)*84);   // strays
 }
 
 function collectCoins(dt){
@@ -2254,12 +2305,11 @@ function drawMap(){
   const ox=(w-(x1-x0)*sc)/2, oy=(h-(y1-y0)*sc)/2;
   const X=x=>ox+(x-x0)*sc, Y=y=>oy+(y-y0)*sc;
 
-  if(!coinMode){
-    mctx.strokeStyle='rgba(255,255,255,.22)'; mctx.lineWidth=1; mctx.setLineDash([3,3]);
-    mctx.beginPath(); mctx.moveTo(X(0),Y(0));
-    course.forEach(c=>mctx.lineTo(X(c.x),Y(c.y)));
-    mctx.stroke(); mctx.setLineDash([]);
-  }
+  mctx.strokeStyle='rgba(255,255,255,.22)'; mctx.lineWidth=1; mctx.setLineDash([3,3]);
+  mctx.beginPath();
+  if(coinMode) COIN_PATH.forEach((c,i)=>i?mctx.lineTo(X(c.x),Y(c.y)):mctx.moveTo(X(c.x),Y(c.y)));
+  else { mctx.moveTo(X(0),Y(0)); course.forEach(c=>mctx.lineTo(X(c.x),Y(c.y))); }
+  mctx.stroke(); mctx.setLineDash([]);
 
   if(TRACK.length>1){
     mctx.strokeStyle='rgba(223,244,248,.5)'; mctx.lineWidth=1.5;
@@ -2411,7 +2461,7 @@ function frame(now){
   set('iTwa',Math.round(Math.abs(d.twa))+(d.twa>=0?'S':'P'));
   set('iDist',Math.round(Math.hypot(goal.x-boat.x,goal.y-boat.y)/TUNING.pxPerM));
   set('iBrd',Math.round(boat.board*100));
-  set('legName', course[wp] ? course[wp].name : 'finish');
+  set('legName', coinMode ? coinLayout : course[wp] ? course[wp].name : 'finish');
   // the wind panel hangs just below the timer card, whatever height the card is
   const cardBottom=document.getElementById('course').getBoundingClientRect().bottom;
   document.getElementById('windPanel').style.top=(cardBottom+10)+'px';
