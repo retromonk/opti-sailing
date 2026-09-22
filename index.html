@@ -497,7 +497,7 @@ const TUNING = {
   hikeGainDeg:     34,    // how much righting a fully hiked sailor gives
   heelStiff:       7.0,   // springiness of the roll
   heelDamp:        3.0,
-  capsizeDeg:      44,    // past this she goes over
+  capsizeDeg:      54,    // past this she goes over — a real Opti hangs on to about 60°
   flatBonus:       0.30,  // speed lost when sailing badly heeled
   deathRollGain:   16,    // windward rolling when running by the lee
   recoverSec:      3.5,
@@ -1498,7 +1498,7 @@ function step(dt){
   // A stopped boat has no water flowing over the rudder, so she barely answers
   // the helm. Keeping a floor here means you can always work her out of irons
   // instead of being stuck head to wind forever.
-  const bite = clamp(0.24 + boat.spd/1.2, 0, 1);
+  const bite = clamp(0.42 + boat.spd/1.4, 0, 1);
   boat.hdg=norm(boat.hdg + boat.rudder*TUNING.turnRateDeg*D2R*bite*dt);
 
   /* --- sheet, board, crew --- */
@@ -1594,7 +1594,7 @@ function step(dt){
   // Stopped with the sail flogging, the wind simply pushes her bodily
   // downwind. That is what gets a real boat out of irons.
   if(boat.spd<0.5){
-    const dw=vecOf(wind.fromDir+Math.PI), drift=0.45*(1-boat.spd/0.5);
+    const dw=vecOf(wind.fromDir+Math.PI), drift=0.6*(1-boat.spd/0.5);
     boat.x+=dw.x*drift*k; boat.y+=dw.y*drift*k;
   }
 
