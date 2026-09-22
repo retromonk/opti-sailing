@@ -707,12 +707,12 @@ let coursePick=0;      // Windward-Leeward, the simplest
    starboard. The touch pad and the left stick ARE the tiller, so they get
    the real sense by default. The keyboard keys stay plain turn-left and
    turn-right, since a key is not a tiller. */
-let tillerInvert=false;      // direct steering by default; the realistic tiller is an opt-in
+let tillerInvert=true;       // the real push-away tiller by default; direct steering is the opt-out
 /* Crew assist: the crew trims the sail to keep it flowing and hikes when
    she heels, so a new sailor can learn steering, tacking and the course
    first. Any manual sheet or hike input overrides it for that moment. */
-let assist=true;
-try{ if(localStorage.getItem('opti-assist')==='0') assist=false; if(localStorage.getItem('opti-tiller')==='1') tillerInvert=true; }catch(e){}
+let assist=false;
+try{ if(localStorage.getItem('opti-assist')==='1') assist=true; if(localStorage.getItem('opti-tiller')==='0') tillerInvert=false; }catch(e){}
 document.body.classList.toggle('assist',assist);
 let course=[], wp=0;
 let clock=0, running=false, best=null, simTime=0;
@@ -1118,12 +1118,12 @@ function buildSetup(){
   SEL.mode.value=gameMode;
 
   SEL.tiller.innerHTML =
-    '<option value="0">Direct: point to go</option>'+
-    '<option value="1">Real tiller: push away</option>';
+    '<option value="1">Real tiller: push away</option>'+
+    '<option value="0">Direct: point to go</option>';
   SEL.tiller.value = tillerInvert?'1':'0';
   SEL.assist.innerHTML =
-    '<option value="1">On: crew trims &amp; hikes</option>'+
-    '<option value="0">Off: you do it all</option>';
+    '<option value="0">Off: you do it all</option>'+
+    '<option value="1">On: crew trims &amp; hikes (no high scores)</option>';
   SEL.assist.value = assist?'1':'0';
 
   // only show the settings that apply to the game you picked
@@ -1469,8 +1469,9 @@ async function openScoreboard(afterRun){
   setPadFocus(null);
   const rows=await hsRender();
   if(!boardOpen) return;
-  const qualifies = afterRun && coinScore>0 &&
+  const qualifies = afterRun && !assist && coinScore>0 &&
     (rows===null || rows.length<HS_N || coinScore>rows[rows.length-1].score);
+  if(afterRun && assist) HS('hsSub').textContent='Crew assist was on — turn it off to enter the high scores';
   if(qualifies){
     hsEntering=true; hsSlot=0;
     HS('hsSub').textContent='You made the top '+HS_N+' — enter your initials';
@@ -1491,8 +1492,8 @@ async function hsSubmit(){
   hsSaving=true; HS('hsSave').disabled=true; HS('hsSave').textContent='Saving…';
   const name=hsName.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').padEnd(3).slice(0,3);
   try{ localStorage.setItem('opti-initials',name); }catch(e){}
-  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn,
-               shifts:SHIFTS[shiftPick].name+(assist?' · assist':'')};
+  if(assist) return;                                // never onto the board with the crew helping
+  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn, shifts:SHIFTS[shiftPick].name};
   try{
     hsMyId=await store().add(entry);
     hsEntering=false;
