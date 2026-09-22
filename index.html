@@ -214,6 +214,60 @@
   #padNote{display:none}
   body.pad-on #padNote{display:block}
   #setup .pad-focus{outline:3px solid var(--sun);outline-offset:3px}
+
+  /* ============ high score board ============ */
+  #hiscore{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;
+    padding:24px;background:rgba(10,42,54,.9);backdrop-filter:blur(9px)}
+  #hiscore.hidden{display:none}
+  #hsCard{width:100%;max-width:400px;text-align:center}
+  #hsCard h1{font-family:"IBM Plex Mono",monospace;font-size:22px;letter-spacing:.3em;color:var(--sun);
+    margin:0 0 4px;text-shadow:0 3px 0 rgba(6,28,36,.6)}
+  #hsCard .sub{color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px;line-height:1.45}
+  #hsScore{font-family:"IBM Plex Mono",monospace;font-size:30px;color:#fff;margin:0 0 10px}
+  #hsEntry{display:flex;justify-content:center;gap:12px;margin:0 0 14px}
+  .slot{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .slot .arw{font-size:15px;color:rgba(255,255,255,.55);padding:2px 12px;cursor:pointer;user-select:none;
+    border-radius:8px;touch-action:none}
+  .slot .arw:active{color:var(--sun);background:rgba(255,255,255,.1)}
+  .slot .ch{width:52px;height:64px;line-height:60px;font-family:"IBM Plex Mono",monospace;font-size:38px;
+    font-weight:500;color:#fff;background:rgba(16,51,63,.85);border:3px solid rgba(255,255,255,.22);
+    border-radius:12px;cursor:pointer}
+  .slot.cur .ch{border-color:var(--sun);color:var(--sun);box-shadow:0 0 0 3px rgba(255,214,107,.25);
+    animation:hsBlink 1s steps(2,end) infinite}
+  @keyframes hsBlink{50%{border-color:rgba(255,255,255,.22)}}
+  #hsList{font-family:"IBM Plex Mono",monospace;font-size:15px;text-align:left;margin:0 auto 12px;
+    background:rgba(16,51,63,.6);border:2px solid rgba(255,255,255,.14);border-radius:14px;padding:10px 14px}
+  #hsList .hr{display:grid;grid-template-columns:2.2em 3.6em 1fr auto;gap:0 10px;padding:3px 0;
+    color:rgba(255,255,255,.85);align-items:baseline}
+  #hsList .hr .w{font-family:Fredoka,sans-serif;font-size:11px;color:rgba(255,255,255,.45);
+    letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hsList .hr .sc{text-align:right;font-weight:500}
+  #hsList .hr.me{color:var(--sun)} #hsList .hr.me .w{color:rgba(255,214,107,.7)}
+  #hsList .empty{color:rgba(255,255,255,.5);font-family:Fredoka,sans-serif;font-size:13px;text-align:center;
+    padding:8px 0}
+  #hsNote{color:rgba(255,255,255,.5);font-size:12px;margin:0 0 10px;min-height:1em}
+  #hiscore .btns{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+  #hiscore button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);
+    background:var(--sun);border:3px solid var(--ink);border-radius:14px;padding:10px 24px;
+    cursor:pointer;box-shadow:0 5px 0 rgba(6,28,36,.45)}
+  #hiscore button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3);
+    box-shadow:none;font-weight:500;font-size:13px;padding:10px 15px}
+  #hiscore button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
+  #hiscore button:disabled{opacity:.5;transform:none}
+  #hiscore .pad-focus{outline:3px solid var(--sun);outline-offset:3px}
+  @media (max-height:460px){
+    #hiscore{padding:8px}
+    #hsCard h1{font-size:17px;margin-bottom:0}
+    #hsCard .sub{font-size:11px;margin-bottom:5px}
+    #hsScore{font-size:22px;margin-bottom:4px}
+    #hsEntry{margin-bottom:6px}
+    .slot .ch{width:42px;height:48px;line-height:44px;font-size:28px}
+    .slot .arw{font-size:13px;padding:0 10px}
+    #hsList{font-size:12.5px;padding:5px 10px;margin-bottom:6px}
+    #hsList .hr{padding:1px 0}
+    #hsNote{margin-bottom:5px;font-size:11px}
+    #hiscore button{font-size:13px;padding:7px 16px}
+  }
 </style>
 </head>
 <body>
@@ -311,6 +365,22 @@
       <button id="goBtn">Go sailing</button>
       <button id="restartBtn" class="ghost">Restart</button>
       <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
+      <button id="hsBtn" class="ghost">🏆 High scores</button>
+    </div>
+  </div>
+</div>
+
+<div id="hiscore" class="hidden">
+  <div id="hsCard">
+    <h1>HIGH SCORES</h1>
+    <p class="sub" id="hsSub"></p>
+    <div id="hsScore"></div>
+    <div id="hsEntry"></div>
+    <div id="hsList"></div>
+    <p id="hsNote"></p>
+    <div class="btns">
+      <button id="hsSave">Save score</button>
+      <button id="hsClose" class="ghost">Sail again</button>
     </div>
   </div>
 </div>
@@ -343,6 +413,50 @@ addEventListener('error', e=>{
   b.style.display='block';
   b.textContent = (e.message||'Script error') + (e.lineno ? '  — line '+e.lineno : '');
 });
+</script>
+
+<script>
+/* ============================================================
+   SHARED HIGH SCORES — Firebase setup
+   Paste the web app config from your Firebase project here
+   (Project settings → Your apps → SDK setup and configuration).
+   Until you do, scores are kept on this device only.
+   The Firestore rules that go with it live in firestore.rules.
+   ============================================================ */
+window.FIREBASE_CONFIG = {
+  apiKey:            "PASTE_API_KEY",
+  authDomain:        "PASTE_PROJECT.firebaseapp.com",
+  projectId:         "PASTE_PROJECT",
+  appId:             "PASTE_APP_ID"
+};
+</script>
+<script type="module">
+/* Talks to Firestore. Exposes window.scoreStore = { top(), add(entry) },
+   or leaves it undefined when the config above has not been filled in. */
+const cfg=window.FIREBASE_CONFIG;
+if(cfg && cfg.projectId && !/^PASTE/.test(cfg.projectId) && !/^PASTE/.test(cfg.apiKey)){
+  try{
+    const V='10.12.2';
+    const [{initializeApp},{getFirestore,collection,addDoc,getDocs,query,orderBy,limit,serverTimestamp}] =
+      await Promise.all([
+        import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
+        import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)]);
+    const db=getFirestore(initializeApp(cfg));
+    const col=collection(db,'scores');
+    window.scoreStore={
+      shared:true,
+      async top(n){
+        const snap=await getDocs(query(col,orderBy('score','desc'),limit(n)));
+        return snap.docs.map(d=>({id:d.id,...d.data()}));
+      },
+      async add(e){
+        const ref=await addDoc(col,{name:e.name,score:e.score,wind:e.wind,shifts:e.shifts,ts:serverTimestamp()});
+        return ref.id;
+      }
+    };
+  }catch(err){ window.scoreStoreError=err; console.warn('High scores: Firebase failed to load',err); }
+}
+document.dispatchEvent(new Event('scorestore-ready'));
 </script>
 
 <script>
@@ -1159,6 +1273,7 @@ function pollPad(){
 
   if(g.buttons.some(b=>b&&b.pressed) || g.axes.some(a=>Math.abs(a)>0.3)) setPadInUse(true);
 
+  if(boardOpen){ boardPad(e); return; }
   if(paused){
     if(e.menu||e.start||e.back){ closeSetup(); return; }
     if(padInUse) setupNav(e);
@@ -1174,6 +1289,155 @@ function rumble(s,w,ms){
   const g=activePad(); if(!g||!g.vibrationActuator) return;
   try{ g.vibrationActuator.playEffect('dual-rumble',
        {duration:ms,strongMagnitude:s,weakMagnitude:w}); }catch(e){}
+}
+
+/* ============================================================
+   HIGH SCORE BOARD
+   Old-school arcade: three initials, top ten, shared between
+   every device through Firestore when it is set up, otherwise
+   kept in this browser.
+   ============================================================ */
+const HS_N=10, HS_MAX_SCORE=500;
+const HS_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
+let boardOpen=false, hsEntering=false, hsSlot=0, hsSaving=false, hsMyId=null, hsFromSetup=false;
+let hsName=(()=>{ try{ return (localStorage.getItem('opti-initials')||'AAA').padEnd(3).slice(0,3); }catch(e){ return 'AAA'; } })();
+const HS=(id)=>document.getElementById(id);
+
+const localStore={
+  shared:false,
+  key:'opti-hiscores',
+  read(){ try{ return JSON.parse(localStorage.getItem(this.key)||'[]'); }catch(e){ return []; } },
+  async top(n){ return this.read().sort((a,b)=>b.score-a.score||a.ts-b.ts).slice(0,n); },
+  async add(e){
+    const l=this.read(); const id='l'+Date.now(); l.push({...e,id,ts:Date.now()});
+    try{ localStorage.setItem(this.key,JSON.stringify(l.sort((a,b)=>b.score-a.score).slice(0,50))); }catch(err){}
+    return id;
+  }
+};
+const store=()=>window.scoreStore||localStore;
+
+function hsWindLabel(e){ return `${e.wind} kn · ${e.shifts}`; }
+
+async function hsRender(){
+  const list=HS('hsList');
+  let rows;
+  try{ rows=await store().top(HS_N); }
+  catch(err){ console.warn(err); rows=null; }
+  if(!boardOpen) return rows;
+  if(rows===null){ list.innerHTML='<div class="empty">Could not reach the scoreboard</div>'; return null; }
+  list.innerHTML = rows.length ? rows.map((r,i)=>
+    `<div class="hr${r.id===hsMyId?' me':''}"><span>${String(i+1).padStart(2,' ')}.</span>`+
+    `<span>${String(r.name||'???').slice(0,3)}</span><span class="w">${hsWindLabel(r)}</span>`+
+    `<span class="sc">${r.score}</span></div>`).join('')
+  : '<div class="empty">No scores yet — be the first</div>';
+  return rows;
+}
+
+function hsRenderEntry(){
+  const box=HS('hsEntry');
+  box.innerHTML = hsName.split('').map((c,i)=>
+    `<div class="slot${i===hsSlot?' cur':''}" data-i="${i}">`+
+    `<div class="arw" data-d="1">▲</div><div class="ch">${c===' '?'&nbsp;':c}</div><div class="arw" data-d="-1">▼</div></div>`).join('');
+}
+function hsSpin(d){
+  const i=HS_CHARS.indexOf(hsName[hsSlot]), n=HS_CHARS.length;
+  const c=HS_CHARS[((i<0?0:i)+d+n)%n];
+  hsName=hsName.slice(0,hsSlot)+c+hsName.slice(hsSlot+1);
+  hsRenderEntry();
+}
+function hsMove(d){ hsSlot=clamp(hsSlot+d,0,2); hsRenderEntry(); }
+
+HS('hsEntry').addEventListener('pointerdown',e=>{
+  const slot=e.target.closest('.slot'); if(!slot) return;
+  hsSlot=+slot.dataset.i;
+  const d=e.target.dataset.d; if(d) hsSpin(+d); else hsRenderEntry();
+  e.preventDefault();
+});
+
+async function openScoreboard(afterRun){
+  boardOpen=true; paused=true; hsFromSetup=!afterRun; hsMyId=null; hsSaving=false;
+  HS('setup').classList.add('hidden');
+  HS('hiscore').classList.remove('hidden');
+  HS('hsClose').textContent = afterRun ? 'Sail again' : 'Back';
+  HS('hsNote').textContent = store().shared ? '' :
+    (window.scoreStoreError ? 'Scoreboard offline — scores saved on this device only'
+                            : 'Scores saved on this device only until Firebase is set up');
+  HS('hsScore').textContent = afterRun ? coinScore+' coins' : '';
+  HS('hsSub').textContent = afterRun ? 'Time up!' : 'Coin run · '+COIN_SEC+' seconds';
+  HS('hsEntry').innerHTML=''; HS('hsSave').style.display='none'; hsEntering=false;
+  HS('hsList').innerHTML='<div class="empty">Loading…</div>';
+  setPadFocus(null);
+  const rows=await hsRender();
+  if(!boardOpen) return;
+  const qualifies = afterRun && coinScore>0 &&
+    (rows===null || rows.length<HS_N || coinScore>rows[rows.length-1].score);
+  if(qualifies){
+    hsEntering=true; hsSlot=0;
+    HS('hsSub').textContent='You made the top '+HS_N+' — enter your initials';
+    HS('hsSave').style.display=''; HS('hsSave').disabled=false;
+    hsRenderEntry();
+  }
+}
+function closeScoreboard(){
+  if(!boardOpen) return;
+  boardOpen=false; hsEntering=false;
+  HS('hiscore').classList.add('hidden');
+  setPadFocus(null);
+  if(hsFromSetup){ openSetup(); }
+  else { resetRun(); paused=false; }
+}
+async function hsSubmit(){
+  if(!hsEntering||hsSaving) return;
+  hsSaving=true; HS('hsSave').disabled=true; HS('hsSave').textContent='Saving…';
+  const name=hsName.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').padEnd(3).slice(0,3);
+  try{ localStorage.setItem('opti-initials',name); }catch(e){}
+  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn, shifts:SHIFTS[shiftPick].name};
+  try{
+    hsMyId=await store().add(entry);
+    hsEntering=false;
+    HS('hsEntry').innerHTML=''; HS('hsSave').style.display='none';
+    HS('hsSub').textContent='Saved — '+name+' · '+entry.score+' coins';
+    await hsRender();
+  }catch(err){
+    console.warn(err);
+    HS('hsNote').textContent='Could not save to the shared board — check your connection and try again';
+    HS('hsSave').disabled=false;
+  }
+  hsSaving=false; HS('hsSave').textContent='Save score';
+}
+HS('hsSave').addEventListener('click',hsSubmit);
+HS('hsClose').addEventListener('click',closeScoreboard);
+HS('hsBtn').addEventListener('click',()=>openScoreboard(false));
+// once Firebase has loaded, a board that is already open should show the shared list
+document.addEventListener('scorestore-ready',()=>{ if(boardOpen&&!hsEntering) openScoreboard(!hsFromSetup); });
+
+/* the board takes over the keyboard while it is up: letters type initials,
+   and none of the game keys (R, M, L…) fire underneath it */
+document.addEventListener('keydown',e=>{
+  if(!boardOpen) return;
+  e.stopPropagation();
+  const k=e.key;
+  if(k==='Escape'){ closeScoreboard(); return; }
+  if(!hsEntering){ if(k==='Enter'||k===' ') closeScoreboard(); return; }
+  if(k==='Enter') hsSubmit();
+  else if(k==='ArrowLeft') hsMove(-1);
+  else if(k==='ArrowRight') hsMove(1);
+  else if(k==='ArrowUp') hsSpin(1);
+  else if(k==='ArrowDown') hsSpin(-1);
+  else if(k==='Backspace'){ hsName=hsName.slice(0,hsSlot)+' '+hsName.slice(hsSlot+1); if(hsSlot>0) hsSlot--; hsRenderEntry(); }
+  else if(k.length===1 && HS_CHARS.includes(k.toUpperCase())){
+    hsName=hsName.slice(0,hsSlot)+k.toUpperCase()+hsName.slice(hsSlot+1);
+    if(hsSlot<2) hsSlot++; hsRenderEntry();
+  }
+  e.preventDefault();
+});
+/* and the controller: D-pad spins and moves, ✕ saves, ○ goes back */
+function boardPad(e){
+  if(e.back){ closeScoreboard(); return; }
+  if(!hsEntering){ if(e.ok||e.start||e.menu) closeScoreboard(); return; }
+  if(e.up) hsSpin(1); if(e.down) hsSpin(-1);
+  if(e.left) hsMove(-1); if(e.right) hsMove(1);
+  if(e.ok||e.start) hsSubmit();
 }
 
 /* ============================================================
@@ -1326,7 +1590,7 @@ function step(dt){
     raceTime+=dt; clock=raceTime;
     coinTime-=dt;
     collectCoins(dt);
-    if(coinTime<=0){ coinTime=0; showCoinResults(); resetRun(); }
+    if(coinTime<=0 && !boardOpen){ coinTime=0; bestCoins=Math.max(bestCoins,coinScore); openScoreboard(true); }
   } else {
     /* ---- the starting sequence ---- */
     if(phase==='pre'){
