@@ -260,6 +260,16 @@
     margin:0 0 4px;text-shadow:0 3px 0 rgba(6,28,36,.6)}
   #hsCard .sub{color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px;line-height:1.45}
   #hsScore{font-family:"IBM Plex Mono",monospace;font-size:30px;color:#fff;margin:0 0 10px}
+  #hsHabits{display:none;margin:0 auto 12px;text-align:left;background:rgba(16,51,63,.6);
+    border:2px solid rgba(255,255,255,.14);border-radius:14px;padding:9px 14px}
+  #hsHabits.show{display:block}
+  #hsHabits .hb{display:grid;grid-template-columns:4.2em 4.6em 1fr;gap:0 10px;align-items:baseline;padding:2px 0;font-size:13px}
+  #hsHabits .hb .st{color:var(--sun);letter-spacing:.1em;font-size:14px}
+  #hsHabits .hb .st .dim{color:rgba(255,255,255,.2)}
+  #hsHabits .hb .v{color:rgba(255,255,255,.7);font-size:12px}
+  #hsHabits .hb .v .up{color:var(--stbd)}
+  #hsHabits .tip{margin-top:6px;font-size:12.5px;color:var(--sun);line-height:1.4}
+  #hsHabits .bonus{font-size:12px;color:rgba(255,255,255,.6);margin-top:4px}
   #hsEntry{display:flex;justify-content:center;gap:12px;margin:0 0 14px}
   .slot{display:flex;flex-direction:column;align-items:center;gap:2px}
   .slot .arw{font-size:15px;color:rgba(255,255,255,.55);padding:2px 12px;cursor:pointer;user-select:none;
@@ -300,6 +310,8 @@
     .slot .ch{width:42px;height:48px;line-height:44px;font-size:28px}
     .slot .arw{font-size:13px;padding:0 10px}
     #hsList{font-size:12.5px;padding:5px 10px;margin-bottom:6px}
+    #hsHabits{padding:5px 10px;margin-bottom:6px} #hsHabits .hb{font-size:11.5px;padding:0}
+    #hsHabits .tip{font-size:11px;margin-top:3px}
     #hsList .hr{padding:1px 0}
     #hsNote{margin-bottom:5px;font-size:11px}
     #hiscore button{font-size:13px;padding:7px 16px}
@@ -393,6 +405,8 @@
         <div class="sel-wrap"><select id="selTiller"></select></div></div>
       <div class="field"><label>Crew assist</label>
         <div class="sel-wrap"><select id="selAssist"></select></div></div>
+      <div class="field"><label>Sound</label>
+        <div class="sel-wrap"><select id="selSound"></select></div></div>
       <div class="field" id="fCourse"><label>Course</label>
         <div class="sel-wrap"><select id="selCourse"></select></div></div>
       <div class="field" id="fFleet"><label>Fleet</label>
@@ -426,6 +440,7 @@
     <h1>HIGH SCORES</h1>
     <p class="sub" id="hsSub"></p>
     <div id="hsScore"></div>
+    <div id="hsHabits"></div>
     <div id="hsEntry"></div>
     <div id="hsList"></div>
     <p id="hsNote"></p>
@@ -752,6 +767,8 @@ let tillerInvert=true;       // the real push-away tiller by default; direct ste
    she heels, so a new sailor can learn steering, tacking and the course
    first. Any manual sheet or hike input overrides it for that moment. */
 let assist=false;
+let soundOn=true;
+try{ if(localStorage.getItem('opti-sound')==='0') soundOn=false; }catch(e){}
 try{ if(localStorage.getItem('opti-assist')==='1') assist=true; if(localStorage.getItem('opti-tiller')==='0') tillerInvert=false; }catch(e){}
 document.body.classList.toggle('assist',assist);
 let course=[], wp=0;
@@ -885,12 +902,158 @@ function collectCoins(dt){
   const r=4*TUNING.pxPerM;
   for(const c of COINS){
     if(c.got || Math.hypot(boat.x-c.x,boat.y-c.y)>r) continue;
-    c.got=true; coinScore+=c.v;
-    coinPops.push({x:c.x,y:c.y,t:0,v:c.v});
-    rumble(0.2,0.15,80);
+    const v=Math.round(c.v*habits.mult);            // a flat-and-flowing streak pays extra
+    c.got=true; coinScore+=v; habits.coinBonus+=v-c.v;
+    coinPops.push({x:c.x,y:c.y,t:0,v});
+    rumble(0.2,0.15,80); SFX.coin(habits.mult);
   }
   coinPops=coinPops.filter(p=>(p.t+=dt)<0.7);
 }
+
+function habitsReport(){
+  const h=habits, T=Math.max(1,h.t);
+  const flow=Math.round(100*h.flowT/T), flat=Math.round(100*h.flatT/T);
+  const cleanR = h.tacks ? h.clean/h.tacks : 0;
+  const stars=n=>'★'.repeat(n)+'<span class="dim">'+'★'.repeat(3-n)+'</span>';
+  const sTrim = flow>=70?3:flow>=50?2:flow>=30?1:0;
+  const sFlat = flat>=75?3:flat>=55?2:flat>=35?1:0;
+  const sTack = (h.clean>=2&&cleanR>=0.75)?3:(h.clean>=1&&cleanR>=0.5)?2:h.clean>=1?1:0;
+  let prev=null; try{ prev=JSON.parse(localStorage.getItem('opti-habits-last')||'null'); }catch(e){}
+  try{ localStorage.setItem('opti-habits-last',JSON.stringify({flow,flat,clean:h.clean,tacks:h.tacks})); }catch(e){}
+  const delta=(now,was)=> (prev&&was!==undefined&&now>was) ? ` <span class="up">▲ from ${was}%</span>` : '';
+  const tips={
+    trim:'Watch the coach pill — the moment it says flapping, a touch more sheet.',
+    flat:'Hike a beat earlier, as soon as she leans past 10°. Flat is fast.',
+    tack:'Start tacks with speed on, and let her carry through before you sheet in again.',
+    all: 'Textbook sailing. Try a windier day, or the real tiller if you have not yet.'
+  };
+  const low=Math.min(sTrim,sFlat,sTack);
+  const tip = low===3 ? tips.all : sTrim===low ? tips.trim : sFlat===low ? tips.flat : tips.tack;
+  return `<div class="hb"><span>Trim</span><span class="st">${stars(sTrim)}</span><span class="v">flowing ${flow}% of the run${delta(flow,prev&&prev.flow)}</span></div>`+
+         `<div class="hb"><span>Flat</span><span class="st">${stars(sFlat)}</span><span class="v">under 10° heel ${flat}%${delta(flat,prev&&prev.flat)}</span></div>`+
+         `<div class="hb"><span>Tacks</span><span class="st">${stars(sTack)}</span><span class="v">${h.clean} clean of ${h.tacks}${h.shiftTacks?` · ${h.shiftTacks} on a shift`:''}</span></div>`+
+         (h.bonus+h.coinBonus>0?`<div class="bonus">+${h.bonus+h.coinBonus} of your coins came from good habits</div>`:'')+
+         `<div class="tip">${tip}</div>`;
+}
+
+/* ============================================================
+   GOOD HABITS
+   The game already knows when you are sailing well. This is
+   where it says so: a cheer by the boat, a bonus coin or two,
+   a streak multiplier while she is flat and flowing, and a
+   report card at the end of the run.
+   ============================================================ */
+let habits={};
+function resetHabits(){
+  habits={ t:0, flowT:0, flatT:0, tacks:0, clean:0, shiftTacks:0, streak:0, mult:1, offT:0,
+           bonus:0, coinBonus:0, spdHist:[], tackAt:-99, tackFrom:0, headedAt:-99, boardCheered:false, praiseIdx:0 };
+}
+resetHabits();
+let CHEERS=[];
+function cheer(text,color='#3fb877',big=false){
+  CHEERS.push({text,color,t:0,big,ox:(Math.random()*2-1)*10});
+  if(CHEERS.length>3) CHEERS.shift();
+}
+function bonusCoins(n,text){
+  if(coinMode){ coinScore+=n; habits.bonus+=n; cheer(text+'  +'+n,'#ffd66b',true); }
+  else cheer(text,'#3fb877',true);
+  SFX.cheer(); rumble(0.3,0.5,120);
+}
+function trackHabits(dt, twaDeg, side){
+  const h=habits; h.t+=dt;
+  const flowing = telltale.state==='attached' || telltale.state==='running';
+  const flat = Math.abs(boat.heel)*R2D < 10;
+  if(flowing) h.flowT+=dt;
+  if(flat)    h.flatT+=dt;
+
+  // speed a few seconds ago, for judging tacks
+  h.spdHist.push(boat.spd); if(h.spdHist.length>180) h.spdHist.shift();
+  const spdAgo=h.spdHist[0];
+
+  // a header worth tacking on: the coach's own test
+  if(Math.abs(twaDeg)<70 && shiftDeg*Math.sign(twaDeg||1) < -4) h.headedAt=h.t;
+
+  // tacks: the wind crosses the bow while she is going upwind
+  if(h.prevSide!==undefined && side!==h.prevSide && Math.abs(twaDeg)<90 && boat.spd>0.4){
+    h.tacks++; h.tackAt=h.t; h.tackFrom=Math.max(spdAgo, boat.spd); h.tackJudged=false;
+    // a genuine shift tack: headed in the last couple of seconds, and not another one straight after
+    if(h.t-h.headedAt<2.5 && h.t-(h.lastShiftTack||-99)>20){ h.shiftTacks++; h.lastShiftTack=h.t; bonusCoins(2,'Tacked on the shift!'); h.headedAt=-99; }
+  }
+  h.prevSide=side;
+  if(!h.tackJudged && h.tackAt>0 && h.t-h.tackAt>4){
+    h.tackJudged=true;
+    if(boat.spd>=0.7*h.tackFrom && Math.abs(twaDeg)>35){ h.clean++; bonusCoins(1,'Clean tack!'); }
+  }
+
+  // board up when you bear away, once per downwind leg
+  if(Math.abs(twaDeg)>120 && boat.board<0.5 && !h.boardCheered){ h.boardCheered=true; cheer('Board up ✓'); SFX.tick(); }
+  if(Math.abs(twaDeg)<90) h.boardCheered=false;
+
+  // streak: flat and flowing with way on
+  if(flowing && flat && boat.spd>1 && !boat.capsized){
+    h.streak+=dt; h.offT=0;
+    const m = h.streak>=16 ? 2 : h.streak>=8 ? 1.5 : 1;
+    if(m>h.mult){ h.mult=m; cheer('Flat & fast ×'+m,'#ffd66b',true); SFX.streak(m); rumble(0.2,0.4,150); }
+  } else {
+    h.offT+=dt;
+    if(h.offT>1.2 || boat.capsized || Math.abs(boat.heel)*R2D>18){
+      if(h.mult>1) cheer('streak over','rgba(255,255,255,.6)');
+      h.streak=0; h.mult=1;
+    }
+  }
+}
+function drawCheers(cam){
+  CHEERS=CHEERS.filter(c=>(c.t+=1/60)<1.6);
+  const bx=boat.x-cam.x, by=boat.y-cam.y;
+  CHEERS.forEach((c,i)=>{
+    const a=c.t<1.2?1:1-(c.t-1.2)/0.4;
+    ctx.save(); ctx.globalAlpha=a; ctx.textAlign='center';
+    ctx.font=(c.big?'600 20px':'500 15px')+' Fredoka,sans-serif';
+    const y=by-58-c.t*26-i*22, x=bx+c.ox;
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.85)'; ctx.strokeText(c.text,x,y);
+    ctx.fillStyle=c.color; ctx.fillText(c.text,x,y);
+    ctx.restore();
+  });
+}
+
+/* ---------------- sound: synthesised, no files ---------------- */
+const SFX=(()=>{
+  let ac=null, flutter=null, flutterGain=null, lastCoin=0;
+  const ctxOk=()=>{ if(!soundOn) return null; if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; };
+  const tone=(f,dur,type='sine',vol=0.18,slide=0)=>{ const a=ctxOk(); if(!a) return;
+    const o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,a.currentTime);
+    if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,f+slide),a.currentTime+dur);
+    g.gain.setValueAtTime(vol,a.currentTime); g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+dur);
+    o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime+dur); };
+  const noise=(dur,vol,lp)=>{ const a=ctxOk(); if(!a) return;
+    const n=a.sampleRate*dur, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const src=a.createBufferSource(); src.buffer=b; const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
+    const g=a.createGain(); g.gain.value=vol; src.connect(f).connect(g).connect(a.destination); src.start(); };
+  return {
+    unlock(){ ctxOk(); },
+    coin(mult){ const a=ctxOk(); if(!a) return; const n=Math.min(6,Math.floor((a.currentTime-lastCoin<1.5?1:0)*0)); lastCoin=a.currentTime;
+      const base=mult>=2?880:mult>=1.5?740:660; tone(base,0.12,'triangle',0.16); setTimeout(()=>tone(base*1.5,0.16,'triangle',0.14),70); },
+    cheer(){ tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
+    streak(m){ tone(m>=2?988:784,0.25,'sine',0.14,200); },
+    tick(){ tone(420,0.08,'square',0.06); },
+    splash(){ noise(0.7,0.35,900); tone(120,0.5,'sine',0.2,-60); },
+    gun(){ noise(0.25,0.5,600); tone(90,0.3,'sine',0.25,-40); },
+    gybe(){ noise(0.18,0.25,1200); },
+    // the sail flapping: a soft rustle that fades in while she luffs
+    flutter(on){ const a=ctxOk(); if(!a) return;
+      if(!flutter){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+        for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(0.4+0.6*Math.abs(Math.sin(i/a.sampleRate*Math.PI*14)));
+        flutter=a.createBufferSource(); flutter.buffer=b; flutter.loop=true;
+        const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1400; f.Q.value=0.7;
+        flutterGain=a.createGain(); flutterGain.gain.value=0; flutter.connect(f).connect(flutterGain).connect(a.destination); flutter.start(); }
+      const target=on?0.12:0; flutterGain.gain.setTargetAtTime(target,a.currentTime,on?0.15:0.25); },
+    mute(){ if(flutterGain) flutterGain.gain.value=0; }
+  };
+})();
+// browsers only let audio start after a gesture
+addEventListener('pointerdown',()=>SFX.unlock(),{once:false});
+addEventListener('keydown',()=>SFX.unlock(),{once:false});
 function coinsLeft(){ return COINS.filter(c=>!c.got); }
 function coinTotal(){ return COINS.reduce((a,c)=>a+c.v,0); }
 
@@ -1061,7 +1224,7 @@ function resetRun(){
   const dir=TUNING.windFromDeg*D2R;
   Object.assign(boat,{x:sx,y:sy,hdg:norm(dir-50*D2R),spd:1.2,sheet:20*D2R,board:1,
     heel:0,heelV:0,pitch:0,pitchV:0,capsized:false,recover:0,spray:0});
-  clock=0; running=false;
+  clock=0; running=false; resetHabits(); CHEERS=[];
   phase = raceMode ? 'pre' : 'racing';
   countdown = raceMode ? START_SEC : 0;
   if(coinMode) seedCoins();
@@ -1141,6 +1304,7 @@ function buildSetup(){
   SEL.fleet  = SEL.fleet  || document.getElementById('selFleet');
   SEL.tiller = SEL.tiller || document.getElementById('selTiller');
   SEL.assist = SEL.assist || document.getElementById('selAssist');
+  SEL.sound  = SEL.sound  || document.getElementById('selSound');
 
   const fill=(el,items,idx)=>{
     el.innerHTML=items.map((t,i)=>`<option value="${i}">${t}</option>`).join('');
@@ -1165,6 +1329,8 @@ function buildSetup(){
     '<option value="0">Off: you do it all</option>'+
     '<option value="1">On: crew trims &amp; hikes (no high scores)</option>';
   SEL.assist.value = assist?'1':'0';
+  SEL.sound.innerHTML = '<option value="1">On</option><option value="0">Off</option>';
+  SEL.sound.value = soundOn?'1':'0';
 
   // only show the settings that apply to the game you picked
   document.getElementById('fCourse').style.display = coinMode?'none':'';
@@ -1191,6 +1357,7 @@ function wireSetup(){
   on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
   on(document.getElementById('selFleet'),  v=>{ fleetPick=+v; });
   on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; try{ localStorage.setItem('opti-tiller',v); }catch(e){} });
+  on(document.getElementById('selSound'),  v=>{ soundOn = v==='1'; try{ localStorage.setItem('opti-sound',v); }catch(e){} });
   on(document.getElementById('selAssist'), v=>{ assist = v==='1'; document.body.classList.toggle('assist',assist);
     try{ localStorage.setItem('opti-assist',v); }catch(e){} });
 }
@@ -1504,6 +1671,8 @@ async function openScoreboard(afterRun){
     (window.scoreStoreError ? 'Scoreboard offline — scores saved on this device only'
                             : 'Scores saved on this device only until Firebase is set up');
   HS('hsScore').textContent = afterRun ? coinScore+' coins' : '';
+  HS('hsHabits').classList.toggle('show',!!afterRun);
+  if(afterRun) HS('hsHabits').innerHTML=habitsReport();
   HS('hsSub').textContent = afterRun ? 'Time up!' : 'Coin run · '+COIN_SEC+' seconds';
   HS('hsEntry').innerHTML=''; HS('hsSave').style.display='none'; hsEntering=false;
   HS('hsList').innerHTML='<div class="empty">Loading…</div>';
@@ -1732,7 +1901,7 @@ function step(dt){
   if(side!==telltale.sheetSign && Math.abs(awa)*R2D>120){
     boat.spd*=(1-TUNING.gybeLoss);
     boat.heelV += side*4.5;                        // the boom comes over and rolls her
-    rumble(0.85,0.4,220);
+    rumble(0.85,0.4,220); SFX.gybe();
   }
   telltale={alpha:alpha*R2D,state:flowState(alpha*R2D,awa*R2D),awa:awa*R2D,sheetSign:side};
   if(pad.on && telltale.state==='luffing' && simTime-lastRumble>0.18){ lastRumble=simTime; rumble(0,0.22,200); }
@@ -1757,7 +1926,7 @@ function step(dt){
   boat.heel  += boat.heelV*dt;
 
   if(Math.abs(boat.heel)*R2D > TUNING.capsizeDeg){
-    boat.capsized=true; boat.recover=TUNING.recoverSec; rumble(1,0.8,450);
+    boat.capsized=true; boat.recover=TUNING.recoverSec; rumble(1,0.8,450); SFX.splash();
   }
 
   /* --- PITCH -----------------------------------------------
@@ -1783,6 +1952,9 @@ function step(dt){
   boat.spd = Math.max(0, boat.spd + (target-boat.spd)*(1-Math.exp(-rate*dt/0.35)));
   lastAccel = (boat.spd-before)/dt;
   boat.spray = clamp(boat.spray + ((boat.spd>2.2 && boat.pitch>4*D2R ? 1:0) - boat.spray)*4*dt,0,1);
+
+  trackHabits(dt, twa*R2D, side);
+  SFX.flutter(telltale.state==='luffing' && !paused);
 
   /* --- leeway: board up means she slides sideways ---------- */
   const slipFrac = lerp(TUNING.leewayMin,TUNING.leewayMax,1-boat.board)*clamp(Math.cos(twa),0,1);
@@ -1811,7 +1983,7 @@ function step(dt){
     if(phase==='pre'){
       countdown-=dt;
       if(countdown<=0){
-        countdown=0; phase='racing';
+        countdown=0; phase='racing'; SFX.gun();
         // over the line at the gun? you have to come back and start again
         if(lineSide(startLine,boat.x,boat.y)!==startLine._s0) ocs=true;
       }
@@ -2499,8 +2671,8 @@ function coachText(d){
   if(hd>30) return [assist?'Too much heel — ease the sheet ('+ctl('out')+')':'Too much heel — hike out ('+ctl('hike')+')','#e04a45'];
   if(twa<32 && boat.spd<0.6) return ['In irons — hold the helm over until she swings','#e04a45'];
   if(twa<32) return ['Too close to the wind — turn away from it','#e04a45'];
-  if(telltale.state==='luffing') return ['Sail is flapping — trim in ('+ctl('in')+')','#e04a45'];
-  if(telltale.state==='stalled') return ['Sail is stalled — ease out ('+ctl('out')+')','#f2683a'];
+  if(telltale.state==='luffing') return ['She is flapping — a bit more sheet ('+ctl('in')+')','#e04a45'];
+  if(telltale.state==='stalled') return ['Stalled — ease a touch ('+ctl('out')+')','#f2683a'];
   if(boat.pitch*R2D>TUNING.noseDiveDeg) return ['Bow is burying — move your weight aft','#f2683a'];
   if(telltale.state==='soft') return ['Trim in a little more ('+ctl('in')+')','#ffd66b'];
   if(twa>160) return ['By the lee — she will roll, come up a bit','#ffd66b'];
@@ -2510,8 +2682,9 @@ function coachText(d){
     return ['Lifted — stay on this tack','#3fb877'];
   if(twa>120 && boat.board>0.5) return ['Running deep — pull the daggerboard up ('+ctl('up')+')','#ffd66b'];
   if(twa<60 && boat.board<0.85) return ['Upwind — put the daggerboard down ('+ctl('down')+')','#ffd66b'];
-  if(hd<8) return ['Flat and flowing — keep her there','#3fb877'];
-  return ['Looking good — watch your VMG','#3fb877'];
+  const praise=['Flat and flowing — lovely','That is the groove','Nice — keep her just there','Textbook. Hold it',
+                habits.mult>1?'Streak ×'+habits.mult+' — keep her flat':'Looking good — watch your VMG'];
+  return [praise[Math.floor(simTime/5)%praise.length],'#3fb877'];
 }
 
 /* ============================================================ */
@@ -2575,6 +2748,7 @@ function frame(now){
   if(coinMode) drawCoins(cam);
   for(const b of RIVALS) drawRival(b,cam);
   drawBoat(boat.x-cam.x, boat.y-cam.y, d);
+  drawCheers(cam);
   if(coinMode){
     let near=null,nd=1e9;
     for(const c of coinsLeft()){
