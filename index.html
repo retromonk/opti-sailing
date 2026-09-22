@@ -1573,15 +1573,17 @@ function howtoCards(){
   const noGo = `<svg width="170" height="104" viewBox="0 0 170 104" fill="none" stroke-width="2">
     <text x="60" y="13" fill="#dff4f8" font-size="10" text-anchor="end" font-family="Fredoka,sans-serif">wind</text>
     <path d="M68 4v16" stroke="#dff4f8"/><path d="M63 15l5 7 5-7" stroke="#dff4f8"/>
-    <path d="M85 96L40 51H130Z" fill="rgba(224,74,69,.18)"/>
-    <path d="M85 96L40 51M85 96l45-45" stroke="rgba(224,74,69,.9)" stroke-dasharray="4 3"/>
-    <text x="85" y="66" fill="rgba(255,255,255,.85)" font-size="10" text-anchor="middle" font-family="Fredoka,sans-serif">no-go</text>
-    <path d="M85 96L63 74L85 52L63 30L85 8" stroke="#3fb877" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"/>
-    <text x="30" y="98" fill="#3fb877" font-size="10" font-family="Fredoka,sans-serif">your tacks</text>
+    <path d="M50 92L14 56H86Z" fill="rgba(224,74,69,.18)"/>
+    <path d="M50 92L14 56M50 92l36-36" stroke="rgba(224,74,69,.9)" stroke-dasharray="4 3"/>
+    <text x="50" y="72" fill="rgba(255,255,255,.85)" font-size="10" text-anchor="middle" font-family="Fredoka,sans-serif">no-go</text>
+    <text x="50" y="102" fill="rgba(224,74,69,.9)" font-size="9" text-anchor="middle" font-family="Fredoka,sans-serif">90° you can't sail</text>
+    <path d="M128 92L112 76L128 60L112 44L128 28" stroke="#3fb877" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"/>
+    <path d="M128 28l-5 7M128 28l5 7" stroke="#3fb877" stroke-linecap="round"/>
+    <text x="120" y="102" fill="#3fb877" font-size="9" text-anchor="middle" font-family="Fredoka,sans-serif">tack up in 45° legs</text>
   </svg>`;
   return [
     `<div class="ht"><h2>1 · Steer</h2>Turn with ${K.turn}.${K.steerNote} From the start, turn until the wind is about 45° off the bow — the coach nags you while you are too close.</div>`,
-    `<div class="ht"><h2>2 · Trim the sail</h2>Pull the sheet in with ${K.in}, ease it with ${K.out}. Read the coach pill at the top: <span class="r">flapping → pull in</span>, <span class="o">stalled → ease out</span>, <span class="g">flowing → leave it</span>. The telltale panel bottom-right shows the same thing.</div>`,
+    `<div class="ht"><h2>2 · Trim the sail</h2>Pull the sheet in ${K.in}, ease it ${K.out}. Read the coach pill at the top: <span class="r">flapping → pull in</span>, <span class="o">stalled → ease out</span>, <span class="g">flowing → leave it</span>. The telltale panel bottom-right shows the same thing.</div>`,
     `<div class="ht"><h2>3 · Upwind</h2>She cannot sail straight into the wind. Zigzag up in 45° tacks — a tack takes a couple of seconds, so start it early and let her carry through.${noGo}</div>`,
     `<div class="ht"><h2>4 · Keep her flat</h2>Hike out with ${K.hike} when the heel passes about 10°. A heeled boat is a slow boat, and past 54° she goes over. Ease the sheet in a big gust.</div>`,
     `<div class="ht"><h2>5 · Downwind</h2>Run straight down the wind — it is the fastest way home in an Opti. Pull the daggerboard up with ${K.up} (and back down with ${K.down} before you turn upwind).</div>`,
