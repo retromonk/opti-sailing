@@ -203,6 +203,17 @@
     #rotate{display:flex} #touch,#gauges,#dash,#coach{display:none}
   }
   @media (max-width:900px) and (pointer:fine){ #keys,#padHint,#gauges{display:none} }
+
+  /* a controller is in use: the on-screen pads get out of the way, and
+     come back the moment someone touches the screen again */
+  body.pad-on #touch{display:none !important}
+  @media (pointer:coarse){
+    body.pad-on #padHint:not(.hidden){display:block;
+      left:calc(14px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom))}
+  }
+  #padNote{display:none}
+  body.pad-on #padNote{display:block}
+  #setup .pad-focus{outline:3px solid var(--sun);outline-offset:3px}
 </style>
 </head>
 <body>
@@ -223,7 +234,8 @@
   <b>L stick</b> tiller &nbsp; <b>R2</b>/<b>L2</b> sheet<br>
   <b>R stick</b> hike in / out<br>
   <b>D-pad</b> daggerboard<br>
-  <b>△</b> laylines &nbsp; <b>□</b> coach &nbsp; <b>Options</b> restart
+  <b>△</b> laylines &nbsp; <b>□</b> coach &nbsp; <b>Options</b> restart<br>
+  <b>Share</b> menu
 </div>
 
 <div id="penBadge"></div>
@@ -294,6 +306,7 @@
         <div class="sel-wrap"><select id="selFleet"></select></div></div>
     </div>
     <p id="fsNote" class="sub"></p>
+    <p id="padNote" class="sub">Controller: D-pad to pick a setting, left / right to change it, ✕ to go sailing</p>
     <div class="btns">
       <button id="goBtn">Go sailing</button>
       <button id="restartBtn" class="ghost">Restart</button>
@@ -931,7 +944,7 @@ function wireSetup(){
 }
 
 function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
-function closeSetup(){ applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
+function closeSetup(){ if(typeof setPadFocus==='function') setPadFocus(null); applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
 /* ---------------- touch (iPhone / iPad) ----------------
    Left thumb works the tiller. Right thumb works the sheet:
@@ -1086,22 +1099,75 @@ function showResults(){
 
 /* ---------------- gamepad ---------------- */
 const pad={on:false,steer:0,trimIn:0,ease:0,crew:0,boardUp:false,boardDown:false,prev:{}};
+
+/* whichever was used last wins: pick up the controller and the touch pads
+   hide, touch the screen and they come straight back */
+let padInUse=false;
+function setPadInUse(v){
+  if(v===padInUse) return;
+  padInUse=v; document.body.classList.toggle('pad-on',v);
+  if(!v) setPadFocus(null);
+}
+addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse') setPadInUse(false); },true);
+
+/* the setup screen, driven from the controller */
+let padFocusEl=null;
+function setPadFocus(el){
+  if(padFocusEl) padFocusEl.classList.remove('pad-focus');
+  padFocusEl=el;
+  if(el){ el.classList.add('pad-focus'); el.focus({preventScroll:true}); }
+}
+function setupItems(){
+  return [...document.querySelectorAll('#setup select, #setup button')]
+    .filter(el=>el.offsetParent!==null);
+}
+function setupNav(e){
+  const items=setupItems(); if(!items.length) return;
+  let i=items.indexOf(padFocusEl);
+  if(i<0){ setPadFocus(items[0]); if(!e.ok) return; i=0; }
+  const el=items[i];
+  if(e.down) setPadFocus(items[(i+1)%items.length]);
+  if(e.up)   setPadFocus(items[(i-1+items.length)%items.length]);
+  if((e.left||e.right) && el.tagName==='SELECT'){
+    const n=el.options.length, j=clamp(el.selectedIndex+(e.right?1:-1),0,n-1);
+    if(j!==el.selectedIndex){
+      el.selectedIndex=j; el.dispatchEvent(new Event('change'));
+      // buildSetup rewrites the options and may hide fields, so find it again
+      setPadFocus(setupItems().includes(el)?el:setupItems()[0]);
+    }
+  }
+  if(e.ok){ if(el.tagName==='BUTTON') el.click(); else closeSetup(); }
+}
 function activePad(){ const l=navigator.getGamepads?navigator.getGamepads():[];
   for(const g of l) if(g&&g.connected) return g; return null; }
 function pollPad(){
   const g=activePad(), was=pad.on; pad.on=!!g;
   if(was!==pad.on) padHint.classList.toggle('hidden',!pad.on);
-  if(!g){ pad.steer=pad.trimIn=pad.ease=pad.crew=0; return; }
+  if(!g){ pad.steer=pad.trimIn=pad.ease=pad.crew=0; setPadInUse(false); return; }
   const dz=v=>Math.abs(v)<0.12?0:(v-Math.sign(v)*0.12)/0.88;
   const bv=i=>{const b=g.buttons[i];return !b?0:(typeof b.value==='number'?b.value:(b.pressed?1:0));};
   pad.steer=dz(g.axes[0]||0);
   pad.crew =dz(g.axes[2]||0);          // right stick: lean in or hike out
   pad.trimIn=bv(7); pad.ease=bv(6);
   pad.boardDown=bv(13)>0.5; pad.boardUp=bv(12)>0.5;
-  const edge=i=>{const n=bv(i)>0.5,b=pad.prev[i];pad.prev[i]=n;return n&&!b;};
-  if(edge(9)) resetRun();
-  if(edge(3)) showLaylines=!showLaylines;
-  if(edge(2)){ showCoach=!showCoach; coachEl.classList.toggle('hidden',!showCoach); }
+  const edgeOf=(k,n)=>{const b=pad.prev[k];pad.prev[k]=n;return n&&!b;};
+  const edge=i=>edgeOf(i,bv(i)>0.5);
+  const ly=g.axes[1]||0, lx=g.axes[0]||0;
+  const e={ok:edge(0), back:edge(1), coach:edge(2), lay:edge(3), menu:edge(8), start:edge(9),
+    up:edge(12)|edgeOf('su',ly<-0.6), down:edge(13)|edgeOf('sd',ly>0.6),
+    left:edge(14)|edgeOf('sl',lx<-0.6), right:edge(15)|edgeOf('sr',lx>0.6)};
+
+  if(g.buttons.some(b=>b&&b.pressed) || g.axes.some(a=>Math.abs(a)>0.3)) setPadInUse(true);
+
+  if(paused){
+    if(e.menu||e.start||e.back){ closeSetup(); return; }
+    if(padInUse) setupNav(e);
+    return;
+  }
+  if(e.menu){ openSetup(); return; }
+  if(e.start) resetRun();
+  if(e.lay) showLaylines=!showLaylines;
+  if(e.coach){ showCoach=!showCoach; coachEl.classList.toggle('hidden',!showCoach); }
 }
 let lastRumble=0;
 function rumble(s,w,ms){
