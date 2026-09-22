@@ -566,6 +566,7 @@ const TUNING = {
   capsizeDeg:      54,    // past this she goes over — a real Opti hangs on to about 60°
   flatBonus:       0.30,  // speed lost when sailing badly heeled
   deathRollGain:   16,    // windward rolling when running by the lee
+  surfGain:        0.28,  // speed picked up sliding down a wave face in a breeze
   recoverSec:      3.5,
 
   /* --- pitch --- */
@@ -920,6 +921,7 @@ function habitsReport(){
          `<div class="hb"><span>Flat</span><span class="st">${stars(sFlat)}</span><span class="v">under 10° heel ${flat}%${delta(flat,prev&&prev.flat)}</span></div>`+
          `<div class="hb"><span>Tacks</span><span class="st">${stars(sTack)}</span><span class="v">${h.clean} clean of ${h.tacks}${h.shiftTacks?` · ${h.shiftTacks} on a shift`:''}</span></div>`+
          (h.bonus+h.coinBonus>0?`<div class="bonus">+${h.bonus+h.coinBonus} of your coins came from good habits</div>`:'')+
+         (h.surfs?`<div class="bonus">🌊 caught ${h.surfs} wave${h.surfs>1?'s':''}</div>`:'')+
          `<div class="tip">${tip}</div>`;
 }
 
@@ -971,6 +973,10 @@ function trackHabits(dt, twaDeg, side){
     h.tackJudged=true;
     if(boat.spd>=0.7*h.tackFrom && Math.abs(twaDeg)>35){ h.clean++; bonusCoins(1,'Clean tack!'); }
   }
+
+  // catching a wave: a cheer when a surf really takes, not for every ripple
+  if((boat.surf||1)>1.12){ h.surfT=(h.surfT||0)+dt; if(h.surfT>0.5 && h.t-(h.lastSurf||-99)>10){ h.lastSurf=h.t; h.surfs=(h.surfs||0)+1; cheer('Surfing!','#dff4f8',true); SFX.surf(); rumble(0.15,0.35,200); } }
+  else h.surfT=0;
 
   // board up when you bear away, once per downwind leg
   if(Math.abs(twaDeg)>120 && boat.board<0.5 && !h.boardCheered){ h.boardCheered=true; cheer('Board up ✓'); SFX.tick(); }
@@ -1041,6 +1047,7 @@ const SFX=(()=>{
     splash(){ noise(0.7,0.35,900); tone(120,0.5,'sine',0.2,-60); },
     gun(){ noise(0.25,0.5,600); tone(90,0.3,'sine',0.25,-40); },
     gybe(){ noise(0.18,0.25,1200); },
+    surf(){ noise(0.6,0.22,700); },
     // the sail flapping: a soft rustle that fades in while she luffs
     flutter(on){ const a=ctxOk(); if(!a) return;
       if(!flutter){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
@@ -1816,13 +1823,22 @@ function step(dt){
   const flat = 1 - TUNING.flatBonus*heelRatio*heelRatio;      // flat is fast
   const nose = boat.pitch*R2D > TUNING.noseDiveDeg ? 0.72 : 1; // ploughing the bow under
   const boardBonus = 1+TUNING.boardDragGain*(1-boat.board)*clamp((Math.abs(twa)*R2D-100)/60,0,1);
+  /* --- surfing: sliding down the face of a wave -------------
+     Only downwind, only with way on, and only once the sea has built
+     (from about 10 kn). The face comes and goes as the wave rolls
+     under her, so it arrives in bursts — a real Opti's surfing. */
+  const seaBuilt = clamp((TUNING.waveSteepDeg-8)/10,0,1);
+  const downwind = clamp((Math.abs(twa)*R2D-110)/40,0,1)*clamp((boat.spd-2.2)/1.2,0,1);
+  const slope = waveAt(boat.x+hv.x*16, boat.y+hv.y*16, simTime) - waveAt(boat.x-hv.x*16, boat.y-hv.y*16, simTime);
+  const surf = 1 + TUNING.surfGain*seaBuilt*downwind*(slope<0 ? -slope : -0.45*slope);
+  boat.surf = surf;
   const target = polarSpeed(twa*R2D, wind.spdKn)
-               * power * boardBonus * flat * nose * (1-TUNING.rudderDrag*Math.abs(boat.rudder));
+               * power * boardBonus * flat * nose * surf * (1-TUNING.rudderDrag*Math.abs(boat.rudder));
   const rate = target>boat.spd ? TUNING.accelPerSec : TUNING.decelPerSec;
   const before = boat.spd;
   boat.spd = Math.max(0, boat.spd + (target-boat.spd)*(1-Math.exp(-rate*dt/0.35)));
   lastAccel = (boat.spd-before)/dt;
-  boat.spray = clamp(boat.spray + ((boat.spd>2.2 && boat.pitch>4*D2R ? 1:0) - boat.spray)*4*dt,0,1);
+  boat.spray = clamp(boat.spray + ((boat.spd>2.2 && (boat.pitch>4*D2R || surf>1.08) ? 1:0) - boat.spray)*4*dt,0,1);
 
   trackHabits(dt, twa*R2D, side);
   SFX.flutter(telltale.state==='luffing' && !paused);
