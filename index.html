@@ -128,6 +128,7 @@
   #setup button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
   #fsNote{color:var(--sun)!important;margin:10px 0 0!important;min-height:0}
   #windNote{margin:10px 0 0!important}
+  #soundNote{margin:6px 0 0!important;font-size:11.5px!important;min-height:0}
 
   /* landscape phones are short, so tighten everything up */
   @media (max-height:460px){
@@ -412,6 +413,7 @@
     </div>
     <p id="windNote" class="sub"></p>
     <p id="fsNote" class="sub"></p>
+    <p id="soundNote" class="sub"></p>
     <p id="padNote" class="sub">Controller: D-pad to pick a setting, left / right to change it, ✕ to go sailing</p>
     <div class="btns">
       <button id="goBtn">Go sailing</button>
@@ -1015,8 +1017,22 @@ const SFX=(()=>{
     for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
     const src=a.createBufferSource(); src.buffer=b; const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
     const g=a.createGain(); g.gain.value=vol; src.connect(f).connect(g).connect(a.destination); src.start(); };
+  let silent=null;
   return {
-    unlock(){ ctxOk(); },
+    /* Browsers only start audio inside a user gesture, and iOS is strict about
+       which: touchend or click, not touchstart. iOS also mutes Web Audio while
+       the ringer switch is on silent unless the page has played a media
+       element — so a tiny silent <audio> is played once as well. */
+    unlock(){
+      const a=ctxOk(); if(!a) return;
+      a.resume().catch(()=>{});
+      if(!silent){
+        silent=document.createElement('audio'); silent.setAttribute('playsinline','');
+        silent.src='data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA'; silent.loop=true; silent.volume=0.01;
+      }
+      silent.play().catch(()=>{});
+    },
+    ready(){ return !!ac && ac.state==='running'; },
     coin(mult){ const a=ctxOk(); if(!a) return; const n=Math.min(6,Math.floor((a.currentTime-lastCoin<1.5?1:0)*0)); lastCoin=a.currentTime;
       const base=mult>=2?880:mult>=1.5?740:660; tone(base,0.12,'triangle',0.16); setTimeout(()=>tone(base*1.5,0.16,'triangle',0.14),70); },
     cheer(){ tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
@@ -1036,9 +1052,8 @@ const SFX=(()=>{
     mute(){ if(flutterGain) flutterGain.gain.value=0; }
   };
 })();
-// browsers only let audio start after a gesture
-addEventListener('pointerdown',()=>SFX.unlock(),{once:false});
-addEventListener('keydown',()=>SFX.unlock(),{once:false});
+// browsers only let audio start after a gesture — listen for the ones iOS honours too
+for(const ev of ['touchend','click','pointerup','keydown']) addEventListener(ev,()=>SFX.unlock(),{passive:true});
 function coinsLeft(){ return COINS.filter(c=>!c.got); }
 function coinTotal(){ return COINS.reduce((a,c)=>a+c.v,0); }
 
@@ -1187,6 +1202,8 @@ function buildSetup(){
     '<option value="1">On: crew trims &amp; hikes (no high scores)</option>';
   SEL.assist.value = assist?'1':'0';
   SEL.sound.innerHTML = '<option value="1">On</option><option value="0">Off</option>';
+  document.getElementById('soundNote').textContent = (soundOn && typeof SFX!=='undefined' && !SFX.ready())
+    ? 'Sound starts after your first tap or key press. On an iPhone, check the ringer switch is not on silent.' : '';
   SEL.sound.value = soundOn?'1':'0';
 
   // only show the settings that apply to the game you picked
@@ -1218,7 +1235,7 @@ function wireSetup(){
 }
 
 function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
-function closeSetup(){ if(typeof setPadFocus==='function') setPadFocus(null); applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
+function closeSetup(){ if(typeof setPadFocus==='function') setPadFocus(null); if(typeof SFX!=='undefined'){ SFX.unlock(); SFX.tick(); } applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
 /* ---------------- touch (iPhone / iPad) ----------------
    Left thumb works the tiller. Right thumb works the sheet:
