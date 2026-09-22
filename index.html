@@ -488,7 +488,7 @@ const TUNING = {
   puffBendDeg:     7,      // puffs arrive with a bend in them
 
   maxBoatKn:       4.3,    // reaching ceiling for the day; set by applyWind()
-  accelPerSec:     0.18,   // a real Opti takes several seconds to get going
+  accelPerSec:     0.29,   // a real Opti takes a few seconds to get going
   decelPerSec:     0.18,   // and carries her way for a few boat lengths
   turnRateDeg:     38,     // full rudder at speed — roughly 3 s to tack through 90°
   rudderDrag:      0.18,
@@ -1066,7 +1066,7 @@ const SHIFTS = [
   { name:'Tricky',      g:2.0, note:'big swings and hard puffs, anyone can win' }
 ];
 let shiftPick = 0;     // Steady
-let windPick = 1;      // Light, 7 kn — enough to move without fighting her
+let windPick = 2;      // Breeze, 10 kn — the good stuff, and the day the game is tuned around
 
 function topSpeedFor(kn){
   let best = 0;
@@ -1793,7 +1793,8 @@ function resize(){
     c.style.width=(x*sc)+'px'; c.style.height=(y*sc)+'px';
   }
   // zoom out a little on a phone so more of the course fits on screen
-  const ppm = W<820 ? 6 : 8.5;
+  // closer in than before: at 8.5 px/m a 3 kn boat crawled across the screen
+  const ppm = W<900 ? 8.5 : 12.5;
   if(ppm!==TUNING.pxPerM){ TUNING.pxPerM=ppm; resetRun(); }
 }
 addEventListener('resize',resize);
