@@ -143,6 +143,8 @@
 
   #course{cursor:pointer}
   #course .tap{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.1em;margin-top:5px}
+  #assistBadge{display:none;font-size:9.5px;color:var(--stbd);letter-spacing:.12em;margin-top:5px}
+  body.assist #assistBadge{display:block}
 
   /* ============ touch controls ============ */
   #touch,#rotate{display:none}
@@ -163,6 +165,8 @@
   #sheet{right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));
     width:74px;height:168px;overflow:hidden}
   #sheetFill{position:absolute;left:0;right:0;top:0;background:rgba(255,214,107,.18)}
+  #sheetTick{position:absolute;left:2px;right:2px;height:0;border-top:2px dashed var(--stbd);
+    margin-top:-1px;opacity:.85;pointer-events:none}
   #sheetKnob{position:absolute;left:6px;right:6px;height:34px;margin-top:-17px;border-radius:11px;
     background:var(--sail,#fffaf0);background:#fffaf0;border:3px solid var(--ink);
     box-shadow:0 3px 0 rgba(6,28,36,.4)}
@@ -304,6 +308,7 @@
   <div class="row"><span class="label" id="posnLabel">Position</span><span class="num small" id="posn">— / —</span></div>
   <div class="row"><span class="label">Best</span><span class="num small" id="tBest">—</span></div>
   <div class="row"><span class="label">Leg</span><span class="num small" id="legName">to mark</span></div>
+  <div id="assistBadge">CREW ASSIST ON</div>
   <div class="tap" id="tapHint">TAP TO CHANGE WIND</div>
 </div>
 
@@ -357,6 +362,8 @@
         <div class="sel-wrap"><select id="selShift"></select></div></div>
       <div class="field"><label>Steering</label>
         <div class="sel-wrap"><select id="selTiller"></select></div></div>
+      <div class="field"><label>Crew assist</label>
+        <div class="sel-wrap"><select id="selAssist"></select></div></div>
       <div class="field" id="fCourse"><label>Course</label>
         <div class="sel-wrap"><select id="selCourse"></select></div></div>
       <div class="field" id="fFleet"><label>Fleet</label>
@@ -394,7 +401,7 @@
     <div id="tillerRail"></div><div id="tillerKnob"></div><span class="cap" id="tillerCap">TILLER</span>
   </div>
   <div class="pad" id="sheet">
-    <div id="sheetFill"></div><div id="sheetKnob"></div>
+    <div id="sheetFill"></div><div id="sheetTick"></div><div id="sheetKnob"></div>
     <b class="t">IN</b><b class="b">OUT</b>
   </div>
   <div id="btns">
@@ -566,6 +573,12 @@ function sailPower(a){
   else            lift=0.55;
   return Math.max(lift, 0.90*Math.max(0, Math.cos((a-90)*D2R)));
 }
+/* the sheet angle that puts the sail at its best angle of attack for the
+   current apparent wind — what the crew assist steers toward and what the
+   sheet slider's tick shows */
+function trimTarget(){
+  return clamp(Math.abs(telltale.awa)*D2R - 16*D2R, 0, 90*D2R);
+}
 function flowState(alpha, awa){
   const a = alpha;
   if (Math.abs(awa) > 145) return "running";
@@ -694,7 +707,13 @@ let coursePick=0;      // Windward-Leeward, the simplest
    starboard. The touch pad and the left stick ARE the tiller, so they get
    the real sense by default. The keyboard keys stay plain turn-left and
    turn-right, since a key is not a tiller. */
-let tillerInvert=true;
+let tillerInvert=false;      // direct steering by default; the realistic tiller is an opt-in
+/* Crew assist: the crew trims the sail to keep it flowing and hikes when
+   she heels, so a new sailor can learn steering, tacking and the course
+   first. Any manual sheet or hike input overrides it for that moment. */
+let assist=true;
+try{ if(localStorage.getItem('opti-assist')==='0') assist=false; if(localStorage.getItem('opti-tiller')==='1') tillerInvert=true; }catch(e){}
+document.body.classList.toggle('assist',assist);
 let course=[], wp=0;
 let clock=0, running=false, best=null, simTime=0;
 
@@ -1081,6 +1100,7 @@ function buildSetup(){
   SEL.course = SEL.course || document.getElementById('selCourse');
   SEL.fleet  = SEL.fleet  || document.getElementById('selFleet');
   SEL.tiller = SEL.tiller || document.getElementById('selTiller');
+  SEL.assist = SEL.assist || document.getElementById('selAssist');
 
   const fill=(el,items,idx)=>{
     el.innerHTML=items.map((t,i)=>`<option value="${i}">${t}</option>`).join('');
@@ -1098,9 +1118,13 @@ function buildSetup(){
   SEL.mode.value=gameMode;
 
   SEL.tiller.innerHTML =
-    '<option value="1">Tiller: push away</option>'+
-    '<option value="0">Direct: point to go</option>';
+    '<option value="0">Direct: point to go</option>'+
+    '<option value="1">Real tiller: push away</option>';
   SEL.tiller.value = tillerInvert?'1':'0';
+  SEL.assist.innerHTML =
+    '<option value="1">On: crew trims &amp; hikes</option>'+
+    '<option value="0">Off: you do it all</option>';
+  SEL.assist.value = assist?'1':'0';
 
   // only show the settings that apply to the game you picked
   document.getElementById('fCourse').style.display = coinMode?'none':'';
@@ -1126,7 +1150,9 @@ function wireSetup(){
   on(document.getElementById('selShift'),  v=>{ shiftPick=+v; });
   on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
   on(document.getElementById('selFleet'),  v=>{ fleetPick=+v; });
-  on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; });
+  on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; try{ localStorage.setItem('opti-tiller',v); }catch(e){} });
+  on(document.getElementById('selAssist'), v=>{ assist = v==='1'; document.body.classList.toggle('assist',assist);
+    try{ localStorage.setItem('opti-assist',v); }catch(e){} });
 }
 
 function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
@@ -1252,6 +1278,7 @@ function syncSheetKnob(){
   const y=20+t*(r.height-40);
   document.getElementById('sheetKnob').style.top=y+'px';
   document.getElementById('sheetFill').style.height=y+'px';
+  document.getElementById('sheetTick').style.top=(20+trimTarget()/(90*D2R)*(r.height-40))+'px';
 }
 
 /* The finish board, shown for a few seconds after you cross the line. */
@@ -1464,7 +1491,8 @@ async function hsSubmit(){
   hsSaving=true; HS('hsSave').disabled=true; HS('hsSave').textContent='Saving…';
   const name=hsName.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').padEnd(3).slice(0,3);
   try{ localStorage.setItem('opti-initials',name); }catch(e){}
-  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn, shifts:SHIFTS[shiftPick].name};
+  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn,
+               shifts:SHIFTS[shiftPick].name+(assist?' · assist':'')};
   try{
     hsMyId=await store().add(entry);
     hsEntering=false;
@@ -1565,12 +1593,20 @@ function step(dt){
   if(down('w','arrowup'))inn=1;
   if(down('s','arrowdown'))out=1;
   if(!touch.sheetHeld) boat.sheet+=(out-inn)*TUNING.sheetSpeedDeg*D2R*dt;
+  // the crew eases or trims toward the flowing angle unless a hand is on the sheet
+  if(assist && !touch.sheetHeld && !inn && !out){
+    const goal=trimTarget();
+    const maxStep=TUNING.sheetSpeedDeg*D2R*dt;
+    boat.sheet += clamp(goal-boat.sheet, -maxStep, maxStep);
+  }
   boat.sheet=clamp(boat.sheet,0,90*D2R);
   if(down('q')||pad.boardUp||touch.boardUp)     boat.board-=TUNING.boardSpeed*dt;
   if(down('e')||pad.boardDown||touch.boardDown) boat.board+=TUNING.boardSpeed*dt;
   boat.board=clamp(boat.board,0,1);
 
   let crewTarget = 0.35 + pad.crew*0.65;          // 0 = sitting in, 1 = fully hiked
+  // assisted crew slides out as she heels, all the way out past ~20°
+  if(assist && !pad.crew) crewTarget = clamp(0.35 + (Math.abs(boat.heel)*R2D-8)/12*0.65, 0.35, 1);
   if(down('shift')||touch.hike) crewTarget=1;
   if(down('z'))     crewTarget=-0.25;             // leaning in, to windward
   boat.crew = lerp(boat.crew, clamp(crewTarget,-0.3,1), 1-Math.exp(-6*dt));
@@ -2343,23 +2379,30 @@ function drawMap(){
   mctx.restore();
 }
 
+/* the coach names the actual control for whatever you are steering with */
+const CTL={
+  keys:  { in:'W', out:'S', hike:'Shift', up:'Q', down:'E' },
+  pad:   { in:'R2', out:'L2', hike:'R stick', up:'D-pad ▲', down:'D-pad ▼' },
+  touch: { in:'slide the sheet up', out:'slide the sheet down', hike:'HIKE', up:'BOARD ▲', down:'BOARD ▼' }
+};
+function ctl(k){ return CTL[padInUse?'pad':isTouch?'touch':'keys'][k]; }
 function coachText(d){
   if(boat.capsized) return ['Capsized — she will come back up','#e04a45'];
   const twa=Math.abs(d.twa), hd=Math.abs(boat.heel*R2D);
-  if(hd>30) return ['Too much heel — hike out hard','#e04a45'];
+  if(hd>30) return [assist?'Too much heel — ease the sheet ('+ctl('out')+')':'Too much heel — hike out ('+ctl('hike')+')','#e04a45'];
   if(twa<32 && boat.spd<0.6) return ['In irons — hold the helm over until she swings','#e04a45'];
   if(twa<32) return ['Too close to the wind — turn away from it','#e04a45'];
-  if(telltale.state==='luffing') return ['Trim in — the sail is luffing','#e04a45'];
-  if(telltale.state==='stalled') return ['Ease the sheet — the leech is stalled','#f2683a'];
+  if(telltale.state==='luffing') return ['Sail is flapping — trim in ('+ctl('in')+')','#e04a45'];
+  if(telltale.state==='stalled') return ['Sail is stalled — ease out ('+ctl('out')+')','#f2683a'];
   if(boat.pitch*R2D>TUNING.noseDiveDeg) return ['Bow is burying — move your weight aft','#f2683a'];
-  if(telltale.state==='soft') return ['Trim in a little more','#ffd66b'];
+  if(telltale.state==='soft') return ['Trim in a little more ('+ctl('in')+')','#ffd66b'];
   if(twa>160) return ['By the lee — she will roll, come up a bit','#ffd66b'];
   if(twa<70 && shiftDeg*Math.sign(d.twa||1) < -4)
     return ['Headed — tack onto the shift','#ffd66b'];
   if(twa<70 && shiftDeg*Math.sign(d.twa||1) > 4)
     return ['Lifted — stay on this tack','#3fb877'];
-  if(twa>120 && boat.board>0.5) return ['Running deep — pull the daggerboard up','#ffd66b'];
-  if(twa<60 && boat.board<0.85) return ['Upwind — put the daggerboard down','#ffd66b'];
+  if(twa>120 && boat.board>0.5) return ['Running deep — pull the daggerboard up ('+ctl('up')+')','#ffd66b'];
+  if(twa<60 && boat.board<0.85) return ['Upwind — put the daggerboard down ('+ctl('down')+')','#ffd66b'];
   if(hd<8) return ['Flat and flowing — keep her there','#3fb877'];
   return ['Looking good — watch your VMG','#3fb877'];
 }
