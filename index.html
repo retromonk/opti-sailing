@@ -1707,7 +1707,7 @@ resize();
 
 const C = { sea:'#1d7f9c', deep:'#14607a', foam:'#dff4f8', ink:'#10333f',
             hull:'#fbf4e2', hullSh:'#d9c9a4', sail:'#fffaf0', stripe:'#e04a45',
-            vest:'#ffc63d', skin:'#f0c39a', cap:'#2f6f8f', board:'#8fd9e8' };
+            vest:'#ffc63d', skin:'#f0c39a', cap:'#2f6f8f', board:'#8fd9e8', sun:'#ffd66b', buoy:'#f2683a' };
 
 /* cartoon water: crest arcs drawn straight from the wave function */
 function drawWater(cam){
@@ -2263,9 +2263,17 @@ function drawMap(){
     mctx.fillStyle = i===wp ? C.sun : 'rgba(242,104,58,.85)';
     mctx.beginPath(); mctx.arc(X(c.x),Y(c.y), i===wp?4:2.5, 0,7); mctx.fill();
   });
-  for(const c of coinsLeft()){
-    mctx.fillStyle=C.sun;
-    mctx.beginPath(); mctx.arc(X(c.x),Y(c.y),1.8,0,7); mctx.fill();
+  // coins: bigger dot for a bigger prize, collected ones fade to a ring
+  for(const c of COINS){
+    const r=1.8+c.v*0.8;
+    if(c.got){
+      mctx.strokeStyle='rgba(255,214,107,.28)'; mctx.lineWidth=1;
+      mctx.beginPath(); mctx.arc(X(c.x),Y(c.y),r-0.5,0,7); mctx.stroke();
+    } else {
+      mctx.fillStyle = c.v===3 ? C.buoy : C.sun;
+      mctx.strokeStyle=C.ink; mctx.lineWidth=1;
+      mctx.beginPath(); mctx.arc(X(c.x),Y(c.y),r,0,7); mctx.fill(); mctx.stroke();
+    }
   }
   for(const b of RIVALS){
     mctx.fillStyle=b.c;
