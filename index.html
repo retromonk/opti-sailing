@@ -711,6 +711,7 @@ function seedScenery(){
 /* Where she has actually been. Compare it with where the bow is pointing
    and you can see your own leeway. */
 const TRACK=[]; let trackT=0;
+const WAKE=[]; let wakeT=0;                 // foam off the transom, fading over a few seconds
 
 function windAt(x,y){
   let dir=windBase.dir, spd=TUNING.trueWindKn;
@@ -1011,7 +1012,7 @@ function drawCheers(cam){
 
 /* ---------------- sound: synthesised, no files ---------------- */
 const SFX=(()=>{
-  let ac=null, flutter=null, flutterGain=null, lastCoin=0;
+  let ac=null, flutter=null, flutterGain=null, lastCoin=0, rushSrc=null, rushFilt=null, rushGain=null;
   const ctxOk=()=>{ if(!soundOn) return null; if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; };
   const tone=(f,dur,type='sine',vol=0.18,slide=0)=>{ const a=ctxOk(); if(!a) return;
     const o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,a.currentTime);
@@ -1056,7 +1057,17 @@ const SFX=(()=>{
         const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1400; f.Q.value=0.7;
         flutterGain=a.createGain(); flutterGain.gain.value=0; flutter.connect(f).connect(flutterGain).connect(a.destination); flutter.start(); }
       const target=on?0.12:0; flutterGain.gain.setTargetAtTime(target,a.currentTime,on?0.15:0.25); },
-    mute(){ if(flutterGain) flutterGain.gain.value=0; }
+    // water along the hull: a hiss that rises with speed, louder while surfing
+    rush(spd,surf){ const a=ctxOk(); if(!a) return;
+      if(!rushSrc){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+        for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+        rushSrc=a.createBufferSource(); rushSrc.buffer=b; rushSrc.loop=true;
+        rushFilt=a.createBiquadFilter(); rushFilt.type='lowpass'; rushFilt.Q.value=0.5;
+        rushGain=a.createGain(); rushGain.gain.value=0; rushSrc.connect(rushFilt).connect(rushGain).connect(a.destination); rushSrc.start(); }
+      const lvl=clamp((spd-0.6)/3.5,0,1);
+      rushGain.gain.setTargetAtTime(lvl*0.08*(surf>1.08?1.7:1), a.currentTime, 0.2);
+      rushFilt.frequency.setTargetAtTime(300+spd*260, a.currentTime, 0.2); },
+    mute(){ if(flutterGain) flutterGain.gain.value=0; if(rushGain) rushGain.gain.value=0; }
   };
 })();
 // browsers only let audio start after a gesture — listen for the ones iOS honours too
@@ -1115,7 +1126,7 @@ function resetRun(){
   ocs=false; started=!raceMode; hitCool=0;
   windBase.dir=dir; windMean=dir; shiftDeg=0;
   wind.fromDir=dir; wind.spdKn=TUNING.trueWindKn;
-  trace.length=0; TRACK.length=0; seedPuffs(); seedScenery();
+  trace.length=0; TRACK.length=0; WAKE.length=0; seedPuffs(); seedScenery();
   course.forEach(k=>{ if(k.type!=='mark'){ k._s=undefined; reached(k); } });  // prime the line crossings
   startLine._s=undefined; reached(startLine); startLine._s0=startLine._s;
 }
@@ -1717,6 +1728,10 @@ function step(dt){
   shiftDeg = norm(local.dir-windMean)*R2D;
   trackT += dt;
   if(trackT>0.18){ trackT=0; TRACK.push({x:boat.x,y:boat.y}); if(TRACK.length>170) TRACK.shift(); }
+  wakeT += dt;
+  if(wakeT>0.06){ wakeT=0; const hb=vecOf(boat.hdg), Lb=2.3*TUNING.pxPerM*2.1;
+    WAKE.push({x:boat.x-hb.x*Lb*0.42, y:boat.y-hb.y*Lb*0.42, t:0, s:boat.spd}); if(WAKE.length>60) WAKE.shift(); }
+  for(const w of WAKE) w.t+=dt;
   traceT += dt;
   if(traceT > 0.25){ traceT=0; trace.push(shiftDeg); if(trace.length>200) trace.shift(); }
 
@@ -1842,6 +1857,7 @@ function step(dt){
 
   trackHabits(dt, twa*R2D, side);
   SFX.flutter(telltale.state==='luffing' && !paused);
+  SFX.rush(boat.spd, surf);
 
   /* --- leeway: board up means she slides sideways ---------- */
   const slipFrac = lerp(TUNING.leewayMin,TUNING.leewayMax,1-boat.board)*clamp(Math.cos(twa),0,1);
@@ -2205,11 +2221,11 @@ function drawRush(cam){
   const spd=boat.spd;
   if(spd<0.15) return;
   const hv=vecOf(boat.hdg);
-  const len=Math.min(spd,5)*5.5;                 // streak length grows with speed
   const a=clamp(spd/4,0,1);
+  const len=Math.min(spd,5)*(5.5+4*a);           // streaks stretch with speed
   ctx.strokeStyle=`rgba(223,244,248,${0.08+0.24*a})`;
   ctx.lineWidth=1.6; ctx.lineCap='round';
-  const gs=64;
+  const gs=64-18*a;                              // and there are more of them
   ctx.beginPath();
   for(let sy=-gs; sy<H+gs; sy+=gs){
     for(let sx=-gs; sx<W+gs; sx+=gs){
@@ -2221,6 +2237,35 @@ function drawRush(cam){
     }
   }
   ctx.stroke();
+}
+
+/* The wake: churned white water off the transom that stretches with speed
+   and fades in about three seconds — the clearest speed cue there is from
+   above. Plus a little bow wave once she is really moving. */
+function drawWake(cam){
+  const LIFE=3;
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let i=1;i<WAKE.length;i++){
+    const a=WAKE[i-1], b=WAKE[i];
+    if(b.t>LIFE) continue;
+    const age=b.t/LIFE, sf=clamp((b.s-0.6)/3,0,1);
+    if(sf<=0) continue;
+    ctx.strokeStyle=`rgba(223,244,248,${(1-age)*(1-age)*0.55*sf})`;
+    ctx.lineWidth=(3+age*13)*sf;
+    ctx.beginPath(); ctx.moveTo(a.x-cam.x,a.y-cam.y); ctx.lineTo(b.x-cam.x,b.y-cam.y); ctx.stroke();
+  }
+  const sf=clamp((boat.spd-1.5)/2.5,0,1);
+  if(sf>0 && !boat.capsized){
+    const hb=vecOf(boat.hdg), Lb=2.3*TUNING.pxPerM*2.1, bx=boat.x-cam.x+hb.x*Lb*0.46, by=boat.y-cam.y+hb.y*Lb*0.46;
+    ctx.strokeStyle=`rgba(255,255,255,${0.5*sf})`; ctx.lineWidth=2.5;
+    for(const sgn of [1,-1]){
+      const px=-hb.y*sgn, py=hb.x*sgn;                 // out to the side
+      ctx.beginPath();
+      ctx.moveTo(bx+px*4, by+py*4);
+      ctx.quadraticCurveTo(bx+px*11-hb.x*9, by+py*11-hb.y*9, bx+px*15-hb.x*26*sf, by+py*15-hb.y*26*sf);
+      ctx.stroke();
+    }
+  }
 }
 
 /* Puffs read as dark, ruffled patches and lulls as smooth pale ones —
@@ -2526,7 +2571,7 @@ function coachText(d){
 }
 
 /* ============================================================ */
-let last=performance.now(), acc=0, d=lastD, sailedFor=0;
+let last=performance.now(), acc=0, d=lastD, sailedFor=0, zoomNow=1;
 const FIXED=1/60;
 function frame(now){
   pollPad();
@@ -2536,13 +2581,18 @@ function frame(now){
 
   // the view creeps ahead of the boat as she accelerates, which makes
   // speeding up and slowing down something you feel in the camera too
-  const lead=vecOf(boat.hdg);
-  const cam={ x:boat.x-W/2+lead.x*boat.spd*14, y:boat.y-H/2+lead.y*boat.spd*14 };
+  const lead=vecOf(boat.hdg), spdF=clamp(boat.spd/4,0,1);
+  const leadPx=boat.spd*(14+9*spdF);
+  const cam={ x:boat.x-W/2+lead.x*leadPx, y:boat.y-H/2+lead.y*leadPx };
+  // and it closes in a touch as she gets going (not on phones — the screen is tight enough)
+  zoomNow=lerp(zoomNow, 1+(W>=900?0.06:0)*spdF, 1-Math.exp(-2*dts));
+  ctx.save(); ctx.translate(W/2,H/2); ctx.scale(zoomNow,zoomNow); ctx.translate(-W/2,-H/2);
   drawWater(cam);
   drawPuffs(cam);
   drawRush(cam);
   drawScenery(cam);
   drawTrack(cam);
+  drawWake(cam);
   const S=p=>({x:p.x-cam.x,y:p.y-cam.y});
 
   // the route, drawn dim, with the leg you are on picked out
@@ -2608,6 +2658,7 @@ function frame(now){
   ctx.lineTo(-tw.x*80-tw.y*9,-tw.y*80+tw.x*9);
   ctx.closePath(); ctx.fill();
   ctx.restore();
+  ctx.restore();                                   // end of the zoomed world
 
   const vmg=boat.spd*Math.cos(norm(angOf(goal.x-boat.x,goal.y-boat.y)-boat.hdg));
   const reach = polarSpeed(d.twa, TUNING.trueWindKn);                            // possible right now
