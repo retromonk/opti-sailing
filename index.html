@@ -417,6 +417,8 @@
         <div class="sel-wrap"><select id="selAssist"></select></div></div>
       <div class="field"><label>Sound</label>
         <div class="sel-wrap"><select id="selSound"></select></div></div>
+      <div class="field" id="fLay"><label>Laylines</label>
+        <div class="sel-wrap"><select id="selLay"></select></div></div>
       <div class="field" id="fCourse"><label>Course</label>
         <div class="sel-wrap"><select id="selCourse"></select></div></div>
     </div>
@@ -1207,6 +1209,7 @@ function buildSetup(){
   SEL.tiller = SEL.tiller || document.getElementById('selTiller');
   SEL.assist = SEL.assist || document.getElementById('selAssist');
   SEL.sound  = SEL.sound  || document.getElementById('selSound');
+  SEL.lay    = SEL.lay    || document.getElementById('selLay');
 
   const fill=(el,items,idx)=>{
     el.innerHTML=items.map((t,i)=>`<option value="${i}">${t}</option>`).join('');
@@ -1234,6 +1237,9 @@ function buildSetup(){
   document.getElementById('soundNote').textContent = (soundOn && typeof SFX!=='undefined' && !SFX.ready())
     ? 'Sound starts after your first tap or key press. On an iPhone, check the ringer switch is not on silent.' : '';
   SEL.sound.value = soundOn?'1':'0';
+  SEL.lay.innerHTML = '<option value="1">Shown when beating</option><option value="0">Hidden</option>';
+  SEL.lay.value = showLaylines?'1':'0';
+  document.getElementById('fLay').style.display = coinMode?'none':'';
 
   // only show the settings that apply to the game you picked
   document.getElementById('fCourse').style.display = coinMode?'none':'';
@@ -1259,6 +1265,7 @@ function wireSetup(){
   on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
   on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; try{ localStorage.setItem('opti-tiller',v); }catch(e){} });
   on(document.getElementById('selSound'),  v=>{ soundOn = v==='1'; try{ localStorage.setItem('opti-sound',v); }catch(e){} });
+  on(document.getElementById('selLay'),    v=>{ showLaylines = v==='1'; });
   on(document.getElementById('selAssist'), v=>{ assist = v==='1'; document.body.classList.toggle('assist',assist);
     try{ localStorage.setItem('opti-assist',v); }catch(e){} });
 }
