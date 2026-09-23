@@ -66,6 +66,9 @@
   #padHint .live{color:var(--stbd)}
 
   .hidden{display:none}
+  /* a HUD panel the boat is sailing under fades back so you can still see her */
+  .panel,#dash,#gauges{transition:opacity .35s}
+  .panel.faded,#dash.faded,#gauges.faded{opacity:.22}
 
   #windPanel{right:14px;top:126px;width:190px}
   #windPanel .row{display:flex;justify-content:space-between;margin-bottom:6px}
@@ -1056,9 +1059,9 @@ const SFX=(()=>{
       if(!flutter){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
         for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(0.4+0.6*Math.abs(Math.sin(i/a.sampleRate*Math.PI*14)));
         flutter=a.createBufferSource(); flutter.buffer=b; flutter.loop=true;
-        const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1400; f.Q.value=0.7;
+        const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=900; f.Q.value=1.1;
         flutterGain=a.createGain(); flutterGain.gain.value=0; flutter.connect(f).connect(flutterGain).connect(a.destination); flutter.start(); }
-      const target=on?0.12:0; flutterGain.gain.setTargetAtTime(target,a.currentTime,on?0.15:0.25); },
+      const target=on?0.045:0; flutterGain.gain.setTargetAtTime(target,a.currentTime,on?0.5:0.3); },
     // water along the hull: a hiss that rises with speed, louder while surfing
     rush(spd,surf){ const a=ctxOk(); if(!a) return;
       if(!rushSrc){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
@@ -2581,6 +2584,20 @@ function coachText(d){
   return [praise[Math.floor(simTime/5)%praise.length],'#3fb877'];
 }
 
+/* HUD panels fade when the boat is about to disappear behind one */
+const GHOSTABLE=['dash','gauges','course','windPanel','keys','padHint','coach','results'].map(id=>document.getElementById(id)).filter(Boolean);
+let ghostTick=0;
+function ghostPanelsNear(bx,by){
+  if((ghostTick=(ghostTick+1)%6)!==0) return;                 // every 6th frame is plenty
+  const pad=70;
+  for(const el of GHOSTABLE){
+    if(el.classList.contains('hidden') || getComputedStyle(el).display==='none'){ el.classList.remove('faded'); continue; }
+    const r=el.getBoundingClientRect();
+    const near = bx>r.left-pad && bx<r.right+pad && by>r.top-pad && by<r.bottom+pad;
+    el.classList.toggle('faded',near);
+  }
+}
+
 /* ============================================================ */
 let last=performance.now(), acc=0, d=lastD, sailedFor=0, zoomNow=1;
 const FIXED=1/60;
@@ -2593,7 +2610,7 @@ function frame(now){
   // the view creeps ahead of the boat as she accelerates, which makes
   // speeding up and slowing down something you feel in the camera too
   const lead=vecOf(boat.hdg), spdF=clamp(boat.spd/4,0,1);
-  const leadPx=boat.spd*(14+9*spdF);
+  const leadPx=boat.spd*(14+9*spdF)*(W<900?0.55:1);   // less lead on a phone: the boat stays central
   const cam={ x:boat.x-W/2+lead.x*leadPx, y:boat.y-H/2+lead.y*leadPx };
   // and it closes in a touch as she gets going (not on phones — the screen is tight enough)
   zoomNow=lerp(zoomNow, 1+(W>=900?0.08:0)*spdF, 1-Math.exp(-2*dts));
@@ -2656,6 +2673,7 @@ function frame(now){
     if(near) drawPointer(near, cam, near.v+'-COIN');
   } else drawPointer(goal, cam, goal.name);
   drawTrimView(); drawDetail(d); drawMap(); drawTrace(d); syncSheetKnob();
+  ghostPanelsNear((boat.x-cam.x-W/2)*zoomNow+W/2, (boat.y-cam.y-H/2)*zoomNow+H/2);
 
   // true wind arrow, floating above the boat
   ctx.save(); ctx.translate(boat.x-cam.x, boat.y-cam.y);
