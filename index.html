@@ -193,6 +193,7 @@
   #rotate{position:fixed;inset:0;background:var(--seadeep);z-index:90;flex-direction:column;gap:10px;line-height:1.4;
     align-items:center;justify-content:center;text-align:center;font-size:20px;padding:40px}
   #rotate small{font-size:13px;color:rgba(255,255,255,.6)}
+  #rotate small.tip{margin-top:26px;font-size:12px;color:rgba(255,255,255,.45);max-width:300px}
 
   @media (pointer:coarse){
     #keys,#padHint,#windPanel{display:none}
@@ -566,7 +567,8 @@
   </div>
 </div>
 
-<div id="rotate"><span>Turn your phone sideways</span><small id="rotateNote">The game is played in landscape</small></div>
+<div id="rotate"><span>Turn your phone sideways</span><small id="rotateNote">The game is played in landscape</small>
+  <small class="tip">Not rotating? Check that rotation lock is off — on an iPhone it is the padlock icon in Control Centre.</small></div>
 
 <div id="err"></div>
 
