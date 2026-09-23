@@ -261,6 +261,21 @@
     #htCard .btns{margin-top:8px} #howto button{font-size:13px;padding:7px 18px}
   }
 
+  /* ============ controller card ============ */
+  #padcard{position:fixed;inset:0;z-index:62;display:flex;align-items:center;justify-content:center;
+    padding:14px;background:rgba(10,42,54,.92);backdrop-filter:blur(9px)}
+  #padcard.hidden{display:none}
+  #pcCard{width:100%;max-width:820px;max-height:100%;overflow:auto;text-align:center;-webkit-overflow-scrolling:touch}
+  #pcCard h1{font-size:22px;font-weight:600;margin:0 0 2px}
+  #pcCard .sub{color:rgba(255,255,255,.6);font-size:13px;margin:0 0 8px}
+  #pcCard svg{width:100%;height:auto;display:block;max-height:calc(100vh - 150px)}
+  #pcCard .btns{display:flex;gap:9px;justify-content:center;margin-top:8px}
+  #padcard button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);
+    background:var(--sun);border:3px solid var(--ink);border-radius:14px;padding:9px 22px;
+    cursor:pointer;box-shadow:0 5px 0 rgba(6,28,36,.45)}
+  #padcard button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
+  @media (max-height:460px){ #pcCard h1{font-size:17px} #pcCard .sub{font-size:11px;margin-bottom:4px} #pcCard svg{max-height:calc(100vh - 128px)} #padcard button{font-size:13px;padding:6px 16px} }
+
   /* ============ high score board ============ */
   #hiscore{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;
     padding:24px;background:rgba(10,42,54,.9);backdrop-filter:blur(9px)}
@@ -435,6 +450,7 @@
       <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
       <button id="hsBtn" class="ghost">🏆 High scores</button>
       <button id="htBtn" class="ghost">? How to play</button>
+      <button id="pcBtn" class="ghost">🎮 Controller</button>
     </div>
   </div>
 </div>
@@ -446,6 +462,80 @@
     <div id="htGrid"></div>
     <p id="htPad"></p>
     <div class="btns"><button id="htClose">Got it</button></div>
+  </div>
+</div>
+
+<div id="padcard" class="hidden">
+  <div id="pcCard">
+    <h1>Controller</h1>
+    <p class="sub">PlayStation layout — an Xbox pad is the same shape: ✕ ○ □ △ are A B X Y, Options is Menu, Create is View.</p>
+    <svg viewBox="0 0 760 416" xmlns="http://www.w3.org/2000/svg" font-family="Fredoka,sans-serif">
+      <defs>
+        <style>
+          .body{fill:#e8eef2;stroke:#10333f;stroke-width:3}
+          .grip{fill:#d5dde3;stroke:#10333f;stroke-width:3}
+          .btn{fill:#10333f;stroke:#c9d4db;stroke-width:2}
+          .stick{fill:#1d2f38;stroke:#c9d4db;stroke-width:2.5}
+          .trig{fill:#c9d4db;stroke:#10333f;stroke-width:2.5}
+          .lbl{fill:#fff;font-size:15px}
+          .lbl b,.key{font-family:'IBM Plex Mono',monospace;font-size:12px}
+          .lead{stroke:#ffd66b;stroke-width:1.8;fill:none;stroke-dasharray:4 3}
+          .tag{fill:rgba(16,51,63,.85);stroke:rgba(255,255,255,.25);stroke-width:1.5;rx:9}
+          .tagk{fill:#ffd66b;font-size:11.5px;letter-spacing:.06em;font-family:'IBM Plex Mono',monospace}
+          .tagt{fill:#fff;font-size:14px}
+          .glyph{fill:#fff;font-size:14px;text-anchor:middle;dominant-baseline:central}
+        </style>
+      </defs>
+      <!-- triggers and bumpers -->
+      <rect class="trig" x="228" y="98" width="70" height="26" rx="9"/><text x="263" y="116" class="glyph" fill="#10333f" style="fill:#10333f">L1</text>
+      <rect class="trig" x="462" y="98" width="70" height="26" rx="9"/><text x="497" y="116" class="glyph" style="fill:#10333f">R1</text>
+      <rect class="trig" x="236" y="74" width="54" height="22" rx="8"/><text x="263" y="86" class="glyph" style="fill:#10333f">L2</text>
+      <rect class="trig" x="470" y="74" width="54" height="22" rx="8"/><text x="497" y="86" class="glyph" style="fill:#10333f">R2</text>
+      <!-- body -->
+      <path class="grip" d="M258 300 q-30 70 -60 78 q-38 6 -52 -40 q-12 -46 12 -120 q10 -30 40 -30 h60 z"/>
+      <path class="grip" d="M502 300 q30 70 60 78 q38 6 52 -40 q12 -46 -12 -120 q-10 -30 -40 -30 h-60 z"/>
+      <path class="body" d="M212 130 q-26 0 -30 28 l-6 60 q-2 30 26 40 h356 q28 -10 26 -40 l-6 -60 q-4 -28 -30 -28 z"/>
+      <rect class="body" x="318" y="132" width="124" height="60" rx="14"/>
+      <!-- d-pad -->
+      <g transform="translate(262 200)">
+        <rect class="btn" x="-11" y="-34" width="22" height="24" rx="5"/><rect class="btn" x="-11" y="10" width="22" height="24" rx="5"/>
+        <rect class="btn" x="-34" y="-11" width="24" height="22" rx="5"/><rect class="btn" x="10" y="-11" width="24" height="22" rx="5"/>
+        <text x="0" y="-22" class="glyph" font-size="11">▲</text><text x="0" y="22" class="glyph" font-size="11">▼</text>
+      </g>
+      <!-- face buttons -->
+      <g transform="translate(498 200)">
+        <circle class="btn" cx="0" cy="-30" r="14"/><text x="0" y="-30" class="glyph" style="fill:#3fb877">△</text>
+        <circle class="btn" cx="30" cy="0" r="14"/><text x="30" y="0" class="glyph" style="fill:#e04a45">○</text>
+        <circle class="btn" cx="0" cy="30" r="14"/><text x="0" y="30" class="glyph" style="fill:#7fb6ff">✕</text>
+        <circle class="btn" cx="-30" cy="0" r="14"/><text x="-30" y="0" class="glyph" style="fill:#f2a7d8">□</text>
+      </g>
+      <!-- sticks -->
+      <circle class="stick" cx="318" cy="258" r="30"/><circle cx="318" cy="258" r="17" fill="#2c4550"/>
+      <circle class="stick" cx="442" cy="258" r="30"/><circle cx="442" cy="258" r="17" fill="#2c4550"/>
+      <!-- create / options -->
+      <rect class="btn" x="292" y="144" width="14" height="24" rx="4"/><rect class="btn" x="454" y="144" width="14" height="24" rx="4"/>
+      <!-- leaders -->
+      <path class="lead" d="M263 74 L200 42"/><path class="lead" d="M497 74 L560 42"/>
+      <path class="lead" d="M262 166 L210 150"/><path class="lead" d="M299 156 L210 214"/>
+      <path class="lead" d="M318 288 L210 320"/>
+      <path class="lead" d="M498 170 L600 122"/><path class="lead" d="M461 156 L600 174"/>
+      <path class="lead" d="M528 200 L600 226"/><path class="lead" d="M468 200 L600 278"/>
+      <path class="lead" d="M498 230 L600 330"/><path class="lead" d="M442 288 L600 382"/>
+      <!-- tags: left -->
+      <g transform="translate(20 20)"><rect class="tag" width="190" height="44"/><text class="tagk" x="10" y="17">L2</text><text class="tagt" x="10" y="35">Ease the sheet</text></g>
+      <g transform="translate(20 128)"><rect class="tag" width="190" height="44"/><text class="tagk" x="10" y="17">D-PAD ▲ ▼</text><text class="tagt" x="10" y="35">Daggerboard up / down</text></g>
+      <g transform="translate(20 192)"><rect class="tag" width="190" height="44"/><text class="tagk" x="10" y="17">CREATE</text><text class="tagt" x="10" y="35">Menu / change wind</text></g>
+      <g transform="translate(20 298)"><rect class="tag" width="190" height="44"/><text class="tagk" x="10" y="17">L STICK ◂ ▸</text><text class="tagt" x="10" y="35">Tiller</text></g>
+      <!-- tags: right -->
+      <g transform="translate(560 20)"><rect class="tag" width="180" height="44"/><text class="tagk" x="10" y="17">R2</text><text class="tagt" x="10" y="35">Sheet in</text></g>
+      <g transform="translate(600 100)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">△ TRIANGLE</text><text class="tagt" x="10" y="35">Laylines on / off</text></g>
+      <g transform="translate(600 152)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">OPTIONS</text><text class="tagt" x="10" y="35">Restart the run</text></g>
+      <g transform="translate(600 204)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">○ CIRCLE</text><text class="tagt" x="10" y="35">Back / close</text></g>
+      <g transform="translate(600 256)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">□ SQUARE</text><text class="tagt" x="10" y="35">Coach on / off</text></g>
+      <g transform="translate(600 308)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">✕ CROSS</text><text class="tagt" x="10" y="35">Go sailing / select</text></g>
+      <g transform="translate(600 360)"><rect class="tag" width="150" height="44"/><text class="tagk" x="10" y="17">R STICK ◂ ▸</text><text class="tagt" x="10" y="35">Lean in / hike out</text></g>
+    </svg>
+    <div class="btns"><button id="pcClose">Got it</button></div>
   </div>
 </div>
 
@@ -1496,6 +1586,7 @@ function pollPad(){
   if(g.buttons.some(b=>b&&b.pressed) || g.axes.some(a=>Math.abs(a)>0.3)) setPadInUse(true);
 
   if(howtoOpen){ if(e.ok||e.back||e.menu||e.start) closeHowto(); return; }
+  if(padcardOpen){ if(e.ok||e.back||e.menu||e.start) closePadcard(); return; }
   if(boardOpen){ boardPad(e); return; }
   if(paused){
     if(e.menu||e.start||e.back){ closeSetup(); return; }
@@ -1698,6 +1789,16 @@ document.addEventListener('keydown',e=>{
   e.stopPropagation();
   if(['Escape','Enter',' '].includes(e.key)){ closeHowto(); e.preventDefault(); }
 });
+/* the controller card: every button on the pad, labelled */
+let padcardOpen=false;
+function openPadcard(){ padcardOpen=true; paused=true; document.getElementById('setup').classList.add('hidden'); document.getElementById('padcard').classList.remove('hidden'); setPadFocus(null); }
+function closePadcard(){ if(!padcardOpen) return; padcardOpen=false; document.getElementById('padcard').classList.add('hidden'); openSetup(); }
+document.getElementById('pcClose').addEventListener('click',closePadcard);
+document.getElementById('pcBtn').addEventListener('click',openPadcard);
+document.addEventListener('keydown',e=>{ if(!padcardOpen) return; e.stopPropagation(); if(['Escape','Enter',' '].includes(e.key)){ closePadcard(); e.preventDefault(); } });
+// the hint panel in the corner opens it too
+{ const ph=document.getElementById('padHint'); ph.addEventListener('click',()=>{ if(!paused) openSetup(); openPadcard(); }); ph.style.cursor='pointer'; }
+
 // first visit: the card comes up on top of the setup screen
 try{ if(!localStorage.getItem('opti-howto-seen')) setTimeout(openHowto,400); }catch(e){}
 // once Firebase has loaded, a board that is already open should show the shared list
