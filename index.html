@@ -306,6 +306,29 @@
   #padcard button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(6,28,36,.45)}
   @media (max-height:460px){ #pcCard h1{font-size:17px} #pcCard .sub{font-size:11px;margin-bottom:4px} #pcCard svg{max-height:calc(100vh - 128px)} #padcard button{font-size:13px;padding:6px 16px} }
 
+  /* ============ gunk swarm: level up / swamped ============ */
+  #lvlup{position:fixed;inset:0;z-index:58;display:flex;align-items:center;justify-content:center;padding:14px;
+    background:rgba(10,42,54,.72);backdrop-filter:blur(4px)}
+  #lvlup.hidden{display:none}
+  #luCard{max-width:760px;width:100%;text-align:center}
+  #luCard h1{font-family:"IBM Plex Mono",monospace;color:var(--sun);letter-spacing:.2em;font-size:24px;margin:0 0 2px}
+  #luCard .sub{color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px}
+  #luCard .big{font-family:"IBM Plex Mono",monospace;font-size:40px;margin:6px 0 2px}
+  #luCard .best{color:var(--stbd);font-weight:600;margin:0 0 10px}
+  #luOpts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .lu{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.9);border:3px solid rgba(255,255,255,.2);
+    border-radius:16px;padding:12px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
+    text-align:center;transition:transform .12s}
+  .lu.sel,.lu:hover{border-color:var(--sun);transform:translateY(-3px)}
+  .lu .ic{font-size:28px} .lu b{font-size:15px}
+  .lu .lv{color:var(--sun);letter-spacing:.15em;font-size:11px} .lu .tx{font-size:12.5px;color:rgba(255,255,255,.75);line-height:1.35}
+  #luCard .btns{display:flex;gap:9px;justify-content:center;margin-top:6px}
+  #luCard .btns button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);background:var(--sun);
+    border:3px solid var(--ink);border-radius:14px;padding:9px 22px;cursor:pointer}
+  #luCard .btns button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+  @media (max-height:460px){ #luCard h1{font-size:18px} #luCard .sub{font-size:11px;margin-bottom:6px}
+    .lu{padding:7px 6px} .lu .ic{font-size:20px} .lu b{font-size:13px} .lu .tx{font-size:11px} #luCard .big{font-size:28px} }
+
   /* ============ high score board ============ */
   #hiscore{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;
     padding:24px;background:rgba(10,42,54,.9);backdrop-filter:blur(9px)}
@@ -575,6 +598,8 @@
     <div class="btns"><button id="pcClose">Got it</button></div>
   </div>
 </div>
+
+<div id="lvlup" class="hidden"></div>
 
 <div id="hiscore" class="hidden">
   <div id="hsCard">
@@ -944,8 +969,8 @@ function buildCourse(){
    THE RACE: a starting sequence, the course, and penalty turns
    ============================================================ */
 let gameMode='coins';                      // 'race' | 'practice' | 'coins'
-let raceMode=false, coinMode=true;
-function setMode(m){ gameMode=m; raceMode=(m==='race'); coinMode=(m==='coins'); }
+let raceMode=false, coinMode=true, survMode=false;
+function setMode(m){ gameMode=m; raceMode=(m==='race'); coinMode=(m==='coins'); survMode=(m==='surv'); }
 let phase='pre', countdown=0, raceTime=0;
 const START_SEC=60;
 let startLine=null;
@@ -1075,6 +1100,296 @@ function countdownPips(before, after, horn){
   if(after===before) return;
   if(after>=1 && after<=10){ SFX.pip(after); if(after<=3) rumble(0.1,0.25,60); }
   else if(after<=0 && before>=1 && horn) SFX.horn();
+}
+
+/* ============================================================
+   GUNK SWARM
+   Survive as long as you can while gunk oozes in from every side.
+   Your weapons are your sailing: the wake scours what it touches,
+   harder the faster you go; the boom sweeps gunk away on every tack
+   and gybe; and ramming at speed pops it, while bumping into it
+   slowly costs you hull. Gunk drifts with the wind, so it comes on
+   fastest from upwind — a good sailor can kite the whole swarm.
+   ============================================================ */
+const SURV_UPGRADES = [
+  { id:'wake',   name:'Churning wake',  icon:'🌊', text:l=>`Wake hits ${Math.round(35)}% harder and ${l>1?'wider still':'wider'}` },
+  { id:'trail',  name:'Long wake',      icon:'〰️', text:l=>`Your wake lasts ${0.5}s longer` },
+  { id:'boom',   name:'Boom sweep',     icon:'↺', text:l=>`Tacks and gybes sweep a bigger ring, harder` },
+  { id:'squirt', name:'Bailer squirt',  icon:'💦', text:l=>l===0?'Squirts the nearest gunk every second or so':'Squirts faster' },
+  { id:'fender', name:'Orbiting fender',icon:'🛟', text:l=>l===0?'A fender circles the boat, bashing gunk':'One more fender' },
+  { id:'magnet', name:'Sparkle magnet', icon:'✨', text:l=>'Pull sparkles in from further away' },
+  { id:'hull',   name:'Stout hull',     icon:'❤️', text:l=>'+1 heart, and patch one up' },
+  { id:'bottom', name:'Clean bottom',   icon:'🚤', text:l=>'Sail 4% faster' }
+];
+const SURV_MAX = 5;
+let SURV = null, survPick = null;
+
+function seedSurv(){
+  SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
+           hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
+           up:{wake:0,trail:0,boom:0,squirt:0,fender:0,magnet:0,hull:0,bottom:0} };
+  survPick=null;
+}
+const survLvl = id => SURV ? SURV.up[id] : 0;
+function survSpeedMul(){ return survMode && SURV ? 1+0.04*survLvl('bottom') : 1; }
+
+function spawnGunk(){
+  const P=TUNING.pxPerM, t=SURV.t;
+  // just off screen, anywhere round the boat — a little more often from upwind
+  const viewR = Math.hypot(W,H)/2/P/zoomNow + 6;
+  let a = Math.random()*Math.PI*2;
+  const r0=Math.random();
+  if(r0<0.3) a = windMean + (Math.random()*2-1)*0.9;                    // upwind arc
+  else if(r0<0.55) a = boat.hdg + (Math.random()*2-1)*0.7;              // across your bow
+  const u = vecOf(a);
+  const roll=Math.random();
+  const kind = t>100 && roll<Math.min(0.04+t/3000,0.15) ? 'big' : t>40 && roll<Math.min(0.2+t/800,0.45) ? 'mid' : 'small';
+  const K = { small:{hp:1, r:1.3, spd:1.0, xp:1}, mid:{hp:4, r:1.9, spd:0.85, xp:3}, big:{hp:14, r:3.0, spd:0.7, xp:10} }[kind];
+  const toughen = 1 + t/150;
+  SURV.gunk.push({ x:boat.x+u.x*viewR*P, y:boat.y+u.y*viewR*P, kind, hp:K.hp*toughen, max:K.hp*toughen,
+                   r:K.r, spd:K.spd, xp:K.xp, flash:0, wob:Math.random()*6.3, fenderHit:0 });
+}
+
+function hurtHull(){
+  if(SURV.invuln>0) return;
+  SURV.hp--; SURV.invuln=1.0; boat.spd*=0.65;
+  rumble(0.9,0.6,260); SFX.splash(); cheer('Ouch!','#e04a45',true);
+  if(SURV.hp<=0) survOver();
+}
+function killGunk(g){
+  g.dead=true; SURV.cleared++;
+  const n = g.xp>=10 ? 5 : g.xp>=3 ? 2 : 1;
+  for(let i=0;i<n;i++) SURV.gems.push({x:g.x+(Math.random()*2-1)*g.r*TUNING.pxPerM*0.6, y:g.y+(Math.random()*2-1)*g.r*TUNING.pxPerM*0.6, v:g.xp/n, t:0});
+  SFX.tick();
+}
+function hitGunk(g,dmg){ g.hp-=dmg; g.flash=0.12; if(g.hp<=0 && !g.dead) killGunk(g); }
+
+function stepSurv(dt){
+  const S=SURV, P=TUNING.pxPerM, k=KN*P;
+  if(S.over) return;
+  S.t+=dt; S.invuln=Math.max(0,S.invuln-dt);
+
+  // the swarm grows
+  const rate = Math.min(1.4 + S.t*0.035, 8);
+  S.spawnAcc += rate*dt;
+  while(S.spawnAcc>=1 && S.gunk.length<200){ S.spawnAcc--; spawnGunk(); }
+
+  // gunk oozes toward you and drifts downwind with the breeze
+  const dw = vecOf(wind.fromDir+Math.PI);
+  const base = Math.min(1.7 + S.t*0.009, 3.6);
+  for(const g of S.gunk){
+    const dx=boat.x-g.x, dy=boat.y-g.y, dd=Math.hypot(dx,dy)||1;
+    const s=base*g.spd;
+    g.x += (dx/dd*s + dw.x*0.55)*k*dt;
+    g.y += (dy/dd*s + dw.y*0.55)*k*dt;
+    g.wob+=dt*3; g.flash=Math.max(0,g.flash-dt); g.fenderHit=Math.max(0,g.fenderHit-dt);
+  }
+  // keep them from stacking into one blob
+  for(let i=0;i<S.gunk.length;i++) for(let j=i+1;j<S.gunk.length;j++){
+    const a=S.gunk[i], b=S.gunk[j], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), m=(a.r+b.r)*P*0.8;
+    if(d>0 && d<m){ const push=(m-d)/2/d; a.x-=dx*push; a.y-=dy*push; b.x+=dx*push; b.y+=dy*push; }
+  }
+
+  // WAKE: everything the foam touches gets scoured, harder the faster you are going
+  const wakeLife = 1.5 + 0.5*survLvl('trail');
+  const wakeR = (2.0 + 0.45*survLvl('wake'))*P;
+  const wakeDps = (1.1 + 0.4*survLvl('wake')) * Math.max(0, boat.spd-0.8);
+  if(wakeDps>0) for(const g of S.gunk){
+    if(g.dead) continue;
+    const rr=wakeR+g.r*P;
+    for(const w of WAKE){ if(w.t>wakeLife) continue;
+      if(Math.abs(w.x-g.x)<rr && Math.abs(w.y-g.y)<rr && Math.hypot(w.x-g.x,w.y-g.y)<rr){ hitGunk(g, wakeDps*dt); break; } }
+  }
+
+  // BOOM: tacks and gybes sweep a ring of water clear
+  const side = telltale.sheetSign;
+  if(S.prevSide && side!==S.prevSide && boat.spd>0.4){
+    const gybe = Math.abs(telltale.awa)>100;
+    const R = (5 + 1.4*survLvl('boom'))*P*(gybe?1.6:1), dmg=(2.5+1.5*survLvl('boom'))*(gybe?1.5:1);
+    S.rings.push({x:boat.x,y:boat.y,R,t:0});
+    for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-boat.x,g.y-boat.y)<R+g.r*P){
+      hitGunk(g,dmg); const a=angOf(g.x-boat.x,g.y-boat.y), u=vecOf(a); g.x+=u.x*2*P; g.y+=u.y*2*P; }
+    SFX.gybe();
+  }
+  S.prevSide=side;
+
+  // RAM: at speed the bow pops gunk; slow, or upside down, and the gunk wins
+  const hullR = 1.5*P;
+  for(const g of S.gunk){
+    if(g.dead) continue;
+    const d=Math.hypot(g.x-boat.x,g.y-boat.y);
+    if(d < hullR+g.r*P){
+      if(boat.spd>2.4 && !boat.capsized){
+        hitGunk(g, 2*boat.spd);
+        // it bounces off — but anything tough enough to survive the ram still dents you
+        if(!g.dead){ const u=vecOf(angOf(g.x-boat.x,g.y-boat.y)); g.x+=u.x*2.5*P; g.y+=u.y*2.5*P; boat.spd*=0.85; hurtHull(); }
+      } else hurtHull();
+    }
+  }
+
+  // SQUIRT: the bailer fires at the nearest gunk
+  if(survLvl('squirt')>0){
+    S.squirtT-=dt;
+    if(S.squirtT<=0){
+      let near=null, nd=16*P;
+      for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y); if(d<nd){nd=d; near=g;} }
+      if(near){ const u=vecOf(angOf(near.x-boat.x,near.y-boat.y)); S.shots.push({x:boat.x,y:boat.y,vx:u.x*20*P,vy:u.y*20*P,t:0}); S.squirtT=Math.max(0.3,1.3-0.2*survLvl('squirt')); }
+    }
+  }
+  for(const s of S.shots){
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.t+=dt;
+    for(const g of S.gunk) if(!g.dead && !s.done && Math.hypot(g.x-s.x,g.y-s.y)<g.r*P+6){ hitGunk(g,2+0.5*survLvl('squirt')); s.done=true; }
+  }
+  S.shots=S.shots.filter(s=>!s.done && s.t<1.2);
+
+  // FENDERS orbit the boat
+  const nf=survLvl('fender');
+  for(let i=0;i<nf;i++){
+    const a=simTime*2.4+i*Math.PI*2/nf, fx=boat.x+Math.cos(a)*4.5*P, fy=boat.y+Math.sin(a)*4.5*P;
+    for(const g of S.gunk) if(!g.dead && g.fenderHit<=0 && Math.hypot(g.x-fx,g.y-fy)<g.r*P+0.9*P){ hitGunk(g,2.2); g.fenderHit=0.4; }
+  }
+
+  // SPARKLES: pulled in when close, worth more on a flat-and-fast streak
+  const mag=(3+2*survLvl('magnet'))*P;
+  for(const s of S.gems){
+    s.t+=dt;
+    const dx=boat.x-s.x, dy=boat.y-s.y, d=Math.hypot(dx,dy);
+    if(d<mag){ const pull=Math.min(1, (mag-d)/mag+0.3)*30*P*dt; s.x+=dx/d*pull; s.y+=dy/d*pull; }
+    if(d<1.6*P){ s.got=true; S.xp+=s.v*habits.mult; SFX.coin(habits.mult); }
+  }
+  S.gems=S.gems.filter(s=>!s.got && s.t<40);
+  S.gunk=S.gunk.filter(g=>!g.dead && Math.hypot(g.x-boat.x,g.y-boat.y)<Math.hypot(W,H)/P*2*P);
+  S.rings=S.rings.filter(r=>(r.t+=dt)<0.5);
+
+  if(S.xp>=S.need) openLevelUp();
+}
+
+/* ---------------- level up ---------------- */
+function openLevelUp(){
+  const S=SURV;
+  S.xp-=S.need; S.level++; S.need=Math.round(4+S.level*3.5+Math.pow(S.level,1.5));
+  const pool=SURV_UPGRADES.filter(u=>S.up[u.id]<SURV_MAX);
+  const picks=[]; while(picks.length<3 && pool.length) picks.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  if(!picks.length) return;
+  survPick={opts:picks, sel:0};
+  renderLevelUp(); SFX.cheer(); rumble(0.3,0.5,160);
+}
+function renderLevelUp(){
+  const el=document.getElementById('lvlup');
+  el.classList.remove('hidden');
+  el.innerHTML=`<div id="luCard"><h1>Level ${SURV.level}!</h1><p class="sub">Pick an upgrade</p><div id="luOpts">`+
+    survPick.opts.map((u,i)=>{ const l=SURV.up[u.id];
+      return `<button class="lu${i===survPick.sel?' sel':''}" data-i="${i}"><span class="ic">${u.icon}</span>`+
+             `<b>${u.name}</b><span class="lv">${'●'.repeat(l)}${'○'.repeat(SURV_MAX-l)}</span><span class="tx">${u.text(l)}</span></button>`; }).join('')+
+    `</div><p class="sub keys">${padInUse?'◂ ▸ to choose, ✕ to take it':isTouch?'Tap one':'1 · 2 · 3, or ← → and Enter'}</p></div>`;
+  el.querySelectorAll('.lu').forEach(b=>b.addEventListener('click',()=>takeUpgrade(+b.dataset.i)));
+}
+function takeUpgrade(i){
+  if(!survPick) return;
+  const u=survPick.opts[i]; SURV.up[u.id]++;
+  if(u.id==='hull'){ SURV.maxHp++; SURV.hp=Math.min(SURV.maxHp,SURV.hp+1); }
+  survPick=null; document.getElementById('lvlup').classList.add('hidden');
+  cheer(u.name+'!','#ffd66b',true);
+  if(SURV.xp>=SURV.need) openLevelUp();
+}
+function levelUpPad(e){
+  if(e.left||e.up){ survPick.sel=(survPick.sel+survPick.opts.length-1)%survPick.opts.length; renderLevelUp(); }
+  if(e.right||e.down){ survPick.sel=(survPick.sel+1)%survPick.opts.length; renderLevelUp(); }
+  if(e.ok||e.start) takeUpgrade(survPick.sel);
+}
+document.addEventListener('keydown',e=>{
+  if(!survPick && !(SURV&&SURV.over)) return;
+  if(SURV && SURV.over){ if(['Enter',' ','Escape'].includes(e.key)){ e.stopPropagation(); e.preventDefault(); survAgain(e.key==='Escape'); } return; }
+  e.stopPropagation();
+  const k=e.key;
+  if(k>='1'&&k<='3'&&+k<=survPick.opts.length) takeUpgrade(+k-1);
+  else if(k==='ArrowLeft'||k==='a'||k==='ArrowUp') levelUpPad({left:true});
+  else if(k==='ArrowRight'||k==='d'||k==='ArrowDown') levelUpPad({right:true});
+  else if(k==='Enter'||k===' ') takeUpgrade(survPick.sel);
+  e.preventDefault();
+},true);
+
+/* ---------------- the end ---------------- */
+function survBest(){ try{ return JSON.parse(localStorage.getItem('opti-surv-best')||'null'); }catch(e){ return null; } }
+function survOver(){
+  const S=SURV; S.over=true;
+  const prev=survBest(), isBest=!prev || S.t>prev.t;
+  if(isBest) try{ localStorage.setItem('opti-surv-best',JSON.stringify({t:S.t,cleared:S.cleared,level:S.level})); }catch(e){}
+  const el=document.getElementById('lvlup'); el.classList.remove('hidden');
+  el.innerHTML=`<div id="luCard"><h1>Swamped!</h1>`+
+    `<p class="big">${fmt(S.t)}</p><p class="sub">afloat · ${S.cleared} gunk cleared · level ${S.level}</p>`+
+    (isBest?`<p class="best">New best!</p>`:prev?`<p class="sub">Your best: ${fmt(prev.t)}</p>`:'')+
+    `<div class="btns"><button id="luAgain">Sail again</button><button id="luMenu" class="ghost">Menu</button></div>`+
+    `<p class="sub keys">${padInUse?'✕ sail again · ○ menu':''}</p></div>`;
+  document.getElementById('luAgain').addEventListener('click',()=>survAgain(false));
+  document.getElementById('luMenu').addEventListener('click',()=>survAgain(true));
+  SFX.horn();
+}
+function survAgain(toMenu){
+  document.getElementById('lvlup').classList.add('hidden');
+  resetRun();
+  if(toMenu) openSetup();
+}
+
+/* ---------------- drawing ---------------- */
+function drawSurv(cam){
+  const S=SURV, P=TUNING.pxPerM;
+  // sparkles
+  for(const s of S.gems){
+    const x=s.x-cam.x, y=s.y-cam.y, r=3+Math.min(s.v,10)*0.6, tw=Math.sin(simTime*6+s.x)*0.3+0.7;
+    ctx.fillStyle = s.v>=3 ? `rgba(143,217,232,${tw})` : `rgba(255,214,107,${tw})`;
+    ctx.beginPath(); ctx.moveTo(x,y-r*1.6); ctx.lineTo(x+r,y); ctx.lineTo(x,y+r*1.6); ctx.lineTo(x-r,y); ctx.closePath(); ctx.fill();
+  }
+  // boom-sweep rings
+  for(const r of S.rings){
+    ctx.strokeStyle=`rgba(223,244,248,${0.7*(1-r.t/0.5)})`; ctx.lineWidth=6*(1-r.t/0.5)+1;
+    ctx.beginPath(); ctx.arc(r.x-cam.x,r.y-cam.y,r.R*(0.4+r.t/0.5*0.6),0,7); ctx.stroke();
+  }
+  // gunk
+  for(const g of S.gunk){
+    const x=g.x-cam.x, y=g.y-cam.y, R=g.r*P;
+    if(x<-R*2||y<-R*2||x>W+R*2||y>H+R*2) continue;
+    ctx.beginPath();
+    for(let i=0;i<=14;i++){ const a=i/14*Math.PI*2, rr=R*(1+0.12*Math.sin(a*3+g.wob)+0.06*Math.sin(a*5-g.wob*1.3));
+      i?ctx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr):ctx.moveTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr); }
+    ctx.closePath();
+    ctx.fillStyle = g.flash>0 ? '#fffaf0' : g.kind==='big' ? '#6a3f7a' : g.kind==='mid' ? '#5b6e2e' : '#6f8f3a';
+    ctx.fill(); ctx.strokeStyle='rgba(16,51,63,.8)'; ctx.lineWidth=2; ctx.stroke();
+    // eyes that follow you
+    const u=vecOf(angOf(boat.x-g.x,boat.y-g.y)), er=Math.max(2.2,R*0.22);
+    for(const s of [-1,1]){
+      const ex=x+s*R*0.33, ey=y-R*0.15;
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex,ey,er,0,7); ctx.fill();
+      ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(ex+u.x*er*0.45,ey+u.y*er*0.45,er*0.5,0,7); ctx.fill();
+    }
+    if(g.max>1.5 && g.hp<g.max){ ctx.fillStyle='rgba(16,51,63,.7)'; ctx.fillRect(x-R,y+R+4,R*2,3); ctx.fillStyle='#e04a45'; ctx.fillRect(x-R,y+R+4,R*2*g.hp/g.max,3); }
+  }
+  // squirts
+  ctx.fillStyle='#bfe9f5';
+  for(const s of S.shots){ ctx.beginPath(); ctx.arc(s.x-cam.x,s.y-cam.y,4,0,7); ctx.fill(); }
+  // fenders
+  const nf=survLvl('fender');
+  for(let i=0;i<nf;i++){
+    const a=simTime*2.4+i*Math.PI*2/nf, fx=boat.x-cam.x+Math.cos(a)*4.5*P, fy=boat.y-cam.y+Math.sin(a)*4.5*P;
+    ctx.fillStyle='#f2683a'; ctx.beginPath(); ctx.ellipse(fx,fy,0.9*P,0.55*P,a,0,7); ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  }
+}
+function drawSurvOverlay(cam){
+  const S=SURV;
+  // hearts over the boat, blinking while you are hurt
+  const bx=boat.x-cam.x, by=boat.y-cam.y-46;
+  if(!(S.invuln>0 && Math.floor(simTime*10)%2)){
+    ctx.font='15px sans-serif'; ctx.textAlign='center';
+    const row='❤'.repeat(Math.max(0,S.hp))+'♡'.repeat(Math.max(0,S.maxHp-S.hp));
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(16,51,63,.8)'; ctx.strokeText(row,bx,by);
+    ctx.fillStyle='#e04a45'; ctx.fillText(row,bx,by);
+  }
+}
+function drawSurvXpBar(){
+  const S=SURV, f=clamp(S.xp/S.need,0,1);
+  ctx.fillStyle='rgba(16,51,63,.6)'; ctx.fillRect(0,0,W,6);
+  ctx.fillStyle='#ffd66b'; ctx.fillRect(0,0,W*f,6);
 }
 
 /* ============================================================
@@ -1276,6 +1591,7 @@ function resetRun(){
   phase = raceMode ? 'pre' : 'racing';
   countdown = raceMode ? START_SEC : 0;
   if(coinMode) seedCoins();
+  if(survMode) seedSurv(); else { SURV=null; survPick=null; const lu=document.getElementById('lvlup'); if(lu) lu.classList.add('hidden'); }
   raceTime=0; pen=0; penTurn=0; penDir=0; penPrevHdg=boat.hdg;
   ocs=false; started=!raceMode; hitCool=0;
   windBase.dir=dir; windMean=dir; shiftDeg=0;
@@ -1362,6 +1678,7 @@ function buildSetup(){
 
   SEL.mode.innerHTML =
     '<option value="coins">Coin run</option>'+
+    '<option value="surv">Gunk swarm · survive</option>'+
     '<option value="race">Time trial · start gun</option>'+
     '<option value="practice">Practice alone</option>';
   SEL.mode.value=gameMode;
@@ -1380,13 +1697,14 @@ function buildSetup(){
   SEL.sound.value = soundOn?'1':'0';
   SEL.lay.innerHTML = '<option value="1">Shown when beating</option><option value="0">Hidden</option>';
   SEL.lay.value = showLaylines?'1':'0';
-  document.getElementById('fLay').style.display = coinMode?'none':'';
+  document.getElementById('fLay').style.display = (coinMode||survMode)?'none':'';
 
   // only show the settings that apply to the game you picked
-  document.getElementById('fCourse').style.display = coinMode?'none':'';
+  document.getElementById('fCourse').style.display = (coinMode||survMode)?'none':'';
 
   document.getElementById('modeNote').textContent =
-    coinMode ? COIN_SEC+' seconds to collect as much as you can. Coins further upwind are worth more.'
+    survMode ? 'Gunk oozes in from every side. Your wake scours it, tacks and gybes sweep it, and ramming at speed pops it. Stay fast, stay afloat.'
+  : coinMode ? COIN_SEC+' seconds to collect as much as you can. Coins further upwind are worth more.'
   : raceMode ? 'One minute to the gun. Hit the line at speed, race the course against the clock.'
              : 'Sail the course on your own, at your own pace.';
 
@@ -1660,6 +1978,8 @@ function pollPad(){
   if(g.buttons.some(b=>b&&b.pressed) || g.axes.some(a=>Math.abs(a)>0.3)) setPadInUse(true);
 
   if(howtoOpen){ if(e.ok||e.back||e.menu||e.start) closeHowto(); return; }
+  if(survMode && SURV && SURV.over){ if(e.ok||e.start) survAgain(false); else if(e.back||e.menu) survAgain(true); return; }
+  if(survPick){ levelUpPad(e); return; }
   if(padcardOpen){ if(e.ok||e.back||e.menu||e.start) closePadcard(); return; }
   if(boardOpen){ boardPad(e); return; }
   if(paused){
@@ -1838,7 +2158,8 @@ function howtoCards(){
     `<div class="ht"><h2>5 · Downwind</h2>Run straight down the wind — it is the fastest way home in an Opti. Pull the daggerboard up with ${K.up} (and back down with ${K.down} before you turn upwind).</div>`,
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
     `<div class="ht"><h2>7 · Time trial</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn.</div>`,
-    `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
+    `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`,
+    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Grab the sparkles to level up and pick upgrades.</div>`
   ].join('');
 }
 function openHowto(){
@@ -2053,7 +2374,7 @@ function step(dt){
   const slope = waveAt(boat.x+hv.x*16, boat.y+hv.y*16, simTime) - waveAt(boat.x-hv.x*16, boat.y-hv.y*16, simTime);
   const surf = 1 + TUNING.surfGain*seaBuilt*downwind*(slope<0 ? -slope : -0.45*slope);
   boat.surf = surf;
-  const target = polarSpeed(twa*R2D, wind.spdKn)
+  const target = polarSpeed(twa*R2D, wind.spdKn) * survSpeedMul()
                * power * boardBonus * flat * nose * surf * (1-TUNING.rudderDrag*Math.abs(boat.rudder));
   const rate = target>boat.spd ? TUNING.accelPerSec : TUNING.decelPerSec;
   const before = boat.spd;
@@ -2089,6 +2410,9 @@ function step(dt){
     countdownPips(secBefore, Math.ceil(coinTime), true);
     collectCoins(dt);
     if(coinTime<=0 && !boardOpen){ coinTime=0; bestCoins=Math.max(bestCoins,coinScore); openScoreboard(true); }
+  } else if(survMode){
+    raceTime+=dt; clock=raceTime;
+    stepSurv(dt);
   } else {
     /* ---- the starting sequence ---- */
     if(phase==='pre'){
@@ -2716,6 +3040,17 @@ function drawMap(){
   const w=88,h=124;
   mctx.clearRect(0,0,w,h); mctx.fillStyle='#0c2732'; mctx.fillRect(0,0,w,h);
   if(!course.length) return;
+  // in the swarm the map is a radar: 60 m round the boat, gunk in purple, sparkles in gold
+  if(survMode && SURV){
+    const sc=(Math.min(w,h)/2-6)/(60*TUNING.pxPerM), cx=w/2, cy=h/2;
+    mctx.strokeStyle='rgba(255,255,255,.12)'; mctx.beginPath(); mctx.arc(cx,cy,Math.min(w,h)/2-6,0,7); mctx.stroke();
+    mctx.fillStyle=C.sun; for(const g of SURV.gems){ const x=cx+(g.x-boat.x)*sc, y=cy+(g.y-boat.y)*sc; if(x>0&&y>0&&x<w&&y<h) mctx.fillRect(x-1,y-1,2,2); }
+    for(const g of SURV.gunk){ const x=cx+(g.x-boat.x)*sc, y=cy+(g.y-boat.y)*sc; if(x<0||y<0||x>w||y>h) continue;
+      mctx.fillStyle=g.kind==='big'?'#b07ac7':'#9ccf5a'; mctx.beginPath(); mctx.arc(x,y,g.kind==='big'?3:g.kind==='mid'?2.2:1.6,0,7); mctx.fill(); }
+    mctx.save(); mctx.translate(cx,cy); mctx.rotate(boat.hdg); mctx.fillStyle='#fff'; mctx.beginPath();
+    mctx.moveTo(0,-6); mctx.lineTo(4,5); mctx.lineTo(-4,5); mctx.closePath(); mctx.fill(); mctx.restore();
+    return;
+  }
   // fit whichever course is set into the little window
   const xs=[0,boat.x], ys=[0,boat.y];
   if(coinMode) COINS.forEach(c=>{ xs.push(c.x); ys.push(c.y); });
@@ -2816,7 +3151,8 @@ function frame(now){
   document.body.classList.toggle('hold',upright);
   if(upright && rotateTick++%30===0) document.getElementById('rotateNote').textContent =
     (!paused && !boardOpen && !howtoOpen && !padcardOpen) ? 'The clock is waiting for you' : 'The game is played in landscape';
-  if(paused||upright){ acc=0; simTime+=dts*0.4; }   // sea keeps moving, boat does not — and the clock waits
+  const survHold = survMode && SURV && (survPick || SURV.over);
+  if(paused||upright||survHold){ acc=0; simTime+=dts*0.4; }   // sea keeps moving, boat does not — and the clock waits
   else { acc+=dts; while(acc>=FIXED){ d=step(FIXED); acc-=FIXED; } }
 
   // the view creeps ahead of the boat as she accelerates, which makes
@@ -2836,7 +3172,7 @@ function frame(now){
   const S=p=>({x:p.x-cam.x,y:p.y-cam.y});
 
   // the route, drawn dim, with the leg you are on picked out
-  if(course.length && !coinMode){
+  if(course.length && !coinMode && !survMode){
     ctx.setLineDash([9,11]); ctx.lineWidth=2;
     let px=-cam.x, py=-cam.y;                     // the route starts at the line
     course.forEach((c,i)=>{
@@ -2852,7 +3188,7 @@ function frame(now){
   // laylines, but only when the next mark is actually upwind of you
   const brg = angOf(goal.x-boat.x, goal.y-boat.y);
   const beating = Math.abs(norm(windMean-brg))*R2D < 52;
-  if(showLaylines && beating && !coinMode){
+  if(showLaylines && beating && !coinMode && !survMode){
     const m={x:goal.x-cam.x,y:goal.y-cam.y};
     ctx.setLineDash([9,9]); ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,214,107,.4)';
     for(const sgn of [1,-1]){
@@ -2863,7 +3199,7 @@ function frame(now){
   }
 
   // every mark, gate and line on the course
-  if(!coinMode) course.forEach((c,i)=>{
+  if(!coinMode && !survMode) course.forEach((c,i)=>{
     const live = i===wp;
     if(c.type==='mark'){ drawMark(c.x-cam.x, c.y-cam.y, c.name, live); return; }
     const a={x:c.a.x-cam.x,y:c.a.y-cam.y}, b={x:c.b.x-cam.x,y:c.b.y-cam.y};
@@ -2874,9 +3210,12 @@ function frame(now){
   });
 
   if(coinMode) drawCoins(cam);
+  if(survMode && SURV) drawSurv(cam);
   drawBoat(boat.x-cam.x, boat.y-cam.y, d);
+  if(survMode && SURV) drawSurvOverlay(cam);
   drawCheers(cam);
-  if(coinMode){
+  if(survMode){ /* the swarm finds you — no pointer needed */ }
+  else if(coinMode){
     let near=null,nd=1e9;
     for(const c of coinsLeft()){
       const d=Math.hypot(c.x-boat.x,c.y-boat.y);
@@ -2900,6 +3239,7 @@ function frame(now){
   ctx.closePath(); ctx.fill();
   ctx.restore();
   ctx.restore();                                   // end of the zoomed world
+  if(survMode && SURV) drawSurvXpBar();
 
   const vmg=boat.spd*Math.cos(norm(angOf(goal.x-boat.x,goal.y-boat.y)-boat.hdg));
   const reach = polarSpeed(d.twa, TUNING.trueWindKn);                            // possible right now
@@ -2915,12 +3255,15 @@ function frame(now){
   set('iDist',Math.round(Math.hypot(goal.x-boat.x,goal.y-boat.y)/TUNING.pxPerM));
   set('iBrd',Math.round(boat.board*100));
   document.getElementById('brdFill').style.width=(boat.board*64)+'px';
-  set('legName', coinMode ? coinLayout : course[wp] ? course[wp].name : 'finish');
+  set('legName', survMode&&SURV ? 'Level '+SURV.level : coinMode ? coinLayout : course[wp] ? course[wp].name : 'finish');
   // the wind panel hangs just below the timer card, whatever height the card is
   const cardBottom=document.getElementById('course').getBoundingClientRect().bottom;
   document.getElementById('windPanel').style.top=(cardBottom+10)+'px';
   if(!paused){ sailedFor+=dts; if(sailedFor>15) document.getElementById('keys').classList.add('dim'); }
-  if(coinMode){
+  if(survMode && SURV){
+    set('tElapsed', fmt(SURV.t)); set('clockLabel','Afloat');
+    set('posnLabel','Cleared'); set('posn', String(SURV.cleared));
+  } else if(coinMode){
     set('tElapsed', fmt(Math.max(0,coinTime)));
     set('clockLabel','Time left');
     set('posnLabel','Coins');
@@ -2932,11 +3275,12 @@ function frame(now){
     set('tElapsed', c>=60 ? fmt(countdown) : String(c));
     set('clockLabel', c<=10 ? 'GUN IN' : 'START IN');
   } else { set('tElapsed',fmt(raceTime)); set('clockLabel','Elapsed'); }
-  set('tBest',best===null?'—':fmt(best));
+  if(survMode){ const sb=survBest(); set('tBest', sb?fmt(sb.t):'—'); }
+  else set('tBest',best===null?'—':fmt(best));
   document.getElementById('tElapsed').style.color =
     phase==='pre' ? (countdown<10?'#e04a45':countdown<30?'#ffd66b':'#fff') : '#fff';
 
-  if(!coinMode){ set('posnLabel','Marks'); set('posn', Math.min(wp,course.length)+' / '+course.length); }
+  if(!coinMode && !survMode){ set('posnLabel','Marks'); set('posn', Math.min(wp,course.length)+' / '+course.length); }
 
   const pb=document.getElementById('penBadge');
   if(pen>0){
