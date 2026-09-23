@@ -68,6 +68,14 @@
   .hidden{display:none}
   /* on a console the controller is the only input: no pointer on screen */
   body.console, body.console *{cursor:none !important}
+  /* in Edge's mouse mode the pointer is how you press the first button, so keep it until fullscreen */
+  body.console:not(.fs), body.console:not(.fs) *{cursor:auto !important}
+  #xboxTip{display:none;margin:0 auto 12px;max-width:560px;background:rgba(16,51,63,.85);border:2px solid var(--sun);
+    border-radius:14px;padding:10px 14px;text-align:left;font-size:13.5px;line-height:1.45}
+  #xboxTip.show{display:block}
+  #xboxTip ol{margin:4px 0 8px;padding-left:20px}
+  #xboxTip button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);background:var(--sun);
+    border:3px solid var(--ink);border-radius:12px;padding:8px 18px;cursor:pointer}
   /* a HUD panel the boat is sailing under fades back so you can still see her */
   .panel,#dash,#gauges{transition:opacity .35s}
   .panel.faded,#dash.faded,#gauges.faded{opacity:.22}
@@ -441,6 +449,12 @@
 
 <div id="setup">
   <div id="setupCard">
+    <div id="xboxTip">
+      <b id="xboxHead">Playing on Xbox?</b> Two steps, in this order:
+      <ol><li>Press <b>A</b> on the button below to go fullscreen.</li>
+          <li>Then <b>hold the ☰ Menu button</b> until Edge says <i>Use game controls</i> — that hands the controller to the game.</li></ol>
+      <button id="xboxFs">⛶ Go fullscreen</button>
+    </div>
     <h1>Set up your sail</h1>
     <p class="sub" id="modeNote"></p>
     <div id="fields">
@@ -1496,14 +1510,25 @@ function updateFsButton(){
    input, so the pointer is hidden and the game goes fullscreen on the first
    button press (browsers only allow fullscreen from a press, not on load). */
 const isXbox = /Xbox/i.test(navigator.userAgent);
+/* Edge on Xbox: the page cannot switch the pad out of mouse mode (only holding
+   Menu does), and once it is in game-controls mode its presses no longer count
+   as a gesture, so fullscreen has to happen first, from a real click. */
+function updateXboxTip(){
+  const pad = !!(navigator.getGamepads && [...navigator.getGamepads()].some(g=>g&&g.connected));
+  const show = !fsOn() && fsSupported && (isXbox || (pad && !isTouch));
+  document.getElementById('xboxTip').classList.toggle('show',show);
+  document.body.classList.toggle('fs',fsOn());
+}
 if(isXbox){
   document.body.classList.add('console');
-  // older Edge: stop the pad driving a mouse pointer and hand it to the Gamepad API
-  try{ navigator.gamepadInputEmulation='gamepad'; }catch(e){}
+  try{ navigator.gamepadInputEmulation='gamepad'; }catch(e){}          // old Edge only
   const goFull=()=>{ if(!fsOn()) toggleFullscreen(); };
   for(const ev of ['click','keydown','pointerup']) addEventListener(ev,goFull,{once:true,capture:true});
-  document.addEventListener('fullscreenchange',()=>{ if(!fsOn()) for(const ev of ['click','keydown','pointerup']) addEventListener(ev,goFull,{once:true,capture:true}); });
 }
+document.getElementById('xboxFs').addEventListener('click',()=>{ if(!fsOn()) toggleFullscreen(); setTimeout(updateXboxTip,200); });
+document.addEventListener('fullscreenchange',updateXboxTip);
+addEventListener('gamepadconnected',updateXboxTip);
+updateXboxTip();
 
 document.getElementById('fsBtn').addEventListener('click',()=>{
   if(isStandalone){
