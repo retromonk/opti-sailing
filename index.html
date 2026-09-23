@@ -66,6 +66,8 @@
   #padHint .live{color:var(--stbd)}
 
   .hidden{display:none}
+  /* on a console the controller is the only input: no pointer on screen */
+  body.console, body.console *{cursor:none !important}
   /* a HUD panel the boat is sailing under fades back so you can still see her */
   .panel,#dash,#gauges{transition:opacity .35s}
   .panel.faded,#dash.faded,#gauges.faded{opacity:.22}
@@ -1489,6 +1491,20 @@ function updateFsButton(){
   else if(!fsSupported) b.textContent='⛶ Fullscreen on iPhone';
   else { b.textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen'; n.textContent=''; }
 }
+/* ---------------- Xbox ----------------
+   Edge on Xbox says so in its user agent. There the controller is the only
+   input, so the pointer is hidden and the game goes fullscreen on the first
+   button press (browsers only allow fullscreen from a press, not on load). */
+const isXbox = /Xbox/i.test(navigator.userAgent);
+if(isXbox){
+  document.body.classList.add('console');
+  // older Edge: stop the pad driving a mouse pointer and hand it to the Gamepad API
+  try{ navigator.gamepadInputEmulation='gamepad'; }catch(e){}
+  const goFull=()=>{ if(!fsOn()) toggleFullscreen(); };
+  for(const ev of ['click','keydown','pointerup']) addEventListener(ev,goFull,{once:true,capture:true});
+  document.addEventListener('fullscreenchange',()=>{ if(!fsOn()) for(const ev of ['click','keydown','pointerup']) addEventListener(ev,goFull,{once:true,capture:true}); });
+}
+
 document.getElementById('fsBtn').addEventListener('click',()=>{
   if(isStandalone){
     document.getElementById('fsNote').textContent='You are already running it as an app.';
