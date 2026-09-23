@@ -563,7 +563,8 @@ const TUNING = {
   hikeGainDeg:     34,    // how much righting a fully hiked sailor gives
   heelStiff:       7.0,   // springiness of the roll
   heelDamp:        3.0,
-  capsizeDeg:      54,    // past this she goes over — a real Opti hangs on to about 60°
+  capsizeDeg:      62,    // past this she goes over — a real Opti hangs on to about 60°
+  capsizeHoldSec:  0.6,   // and only if she stays there; a wave rolling her past it for a moment is not a capsize
   flatBonus:       0.30,  // speed lost when sailing badly heeled
   deathRollGain:   16,    // windward rolling when running by the lee
   surfGain:        0.28,  // speed picked up sliding down a wave face in a breeze
@@ -1648,7 +1649,7 @@ function howtoCards(){
     `<div class="ht"><h2>1 · Steer</h2>Turn with ${K.turn}.${K.steerNote} From the start, turn until the wind is about 45° off the bow — the coach nags you while you are too close.</div>`,
     `<div class="ht"><h2>2 · Trim the sail</h2>Pull the sheet in ${K.in}, ease it ${K.out}. Read the coach pill at the top: <span class="r">flapping → pull in</span>, <span class="o">stalled → ease out</span>, <span class="g">flowing → leave it</span>. The telltale panel bottom-right shows the same thing.</div>`,
     `<div class="ht"><h2>3 · Upwind</h2>She cannot sail straight into the wind. Zigzag up in 45° tacks — a tack takes a couple of seconds, so start it early and let her carry through.${noGo}</div>`,
-    `<div class="ht"><h2>4 · Keep her flat</h2>Hike out with ${K.hike} when the heel passes about 10°. A heeled boat is a slow boat, and past 54° she goes over. Ease the sheet in a big gust.</div>`,
+    `<div class="ht"><h2>4 · Keep her flat</h2>Hike out with ${K.hike} when the heel passes about 10°. A heeled boat is a slow boat, and past 60° she goes over. Ease the sheet in a big gust.</div>`,
     `<div class="ht"><h2>5 · Downwind</h2>Run straight down the wind — it is the fastest way home in an Opti. Pull the daggerboard up with ${K.up} (and back down with ${K.down} before you turn upwind).</div>`,
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
     `<div class="ht"><h2>7 · Racing</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn. Laylines: <b>L</b>. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
@@ -1810,7 +1811,7 @@ function step(dt){
      nudge her. Everything settles like a spring.            */
   // measured against a 9 knot reference, so a heavy day really does
   // try to put her over and a drifter barely leans her at all
-  const press = clamp(awSpd/9, 0, 2.4);
+  const press = clamp(awSpd/9, 0, 2.1);
   const heelForce = power*press*Math.sin(Math.abs(awa))*TUNING.heelGainDeg;
   const righting  = boat.crew*TUNING.hikeGainDeg;
   let targetHeel = clamp((heelForce - righting), -55, 70)*D2R * -side;
@@ -1819,13 +1820,15 @@ function step(dt){
     targetHeel += side*TUNING.deathRollGain*D2R*Math.sin(simTime*2.3)*(1-boat.board*0.5);
   const heelWave = (waveAt(boat.x+Math.cos(boat.hdg)*14, boat.y+Math.sin(boat.hdg)*14, simTime)
                   - waveAt(boat.x-Math.cos(boat.hdg)*14, boat.y-Math.sin(boat.hdg)*14, simTime))
-                  * TUNING.waveSteepDeg*D2R;
+                  * TUNING.waveSteepDeg*D2R*0.6;
   boat.heelV += ((targetHeel+heelWave-boat.heel)*TUNING.heelStiff - boat.heelV*TUNING.heelDamp)*dt;
   boat.heel  += boat.heelV*dt;
 
+  // she has to stay over for a moment: the chance to dump the sheet is real
   if(Math.abs(boat.heel)*R2D > TUNING.capsizeDeg){
-    boat.capsized=true; boat.recover=TUNING.recoverSec; rumble(1,0.8,450); SFX.splash();
-  }
+    boat.overT=(boat.overT||0)+dt;
+    if(boat.overT>TUNING.capsizeHoldSec){ boat.overT=0; boat.capsized=true; boat.recover=TUNING.recoverSec; rumble(1,0.8,450); SFX.splash(); }
+  } else boat.overT=0;
 
   /* --- PITCH -----------------------------------------------
      Stern squats when she accelerates, bow drops when she is
@@ -2558,6 +2561,7 @@ function ctl(k){ return CTL[padInUse?'pad':isTouch?'touch':'keys'][k]; }
 function coachText(d){
   if(boat.capsized) return ['Capsized — she will come back up','#e04a45'];
   const twa=Math.abs(d.twa), hd=Math.abs(boat.heel*R2D);
+  if(hd>TUNING.capsizeDeg-8) return ['She is going over — dump the sheet ('+ctl('out')+')','#e04a45'];
   if(hd>30) return [assist?'Too much heel — ease the sheet ('+ctl('out')+')':'Too much heel — hike out ('+ctl('hike')+')','#e04a45'];
   if(twa<32 && boat.spd<0.6) return ['In irons — hold the helm over until she swings','#e04a45'];
   if(twa<32) return ['Too close to the wind — turn away from it','#e04a45'];
