@@ -462,7 +462,7 @@
   <div id="btns">
     <button id="bUp">BOARD ▲</button>
     <button id="bDown">BOARD ▼</button>
-    <button id="bHike">HIKE</button>
+    <button id="bHike">HIKE ⇆</button>
   </div>
 </div>
 
@@ -573,7 +573,7 @@ const TUNING = {
   pitchStiff:      9.0,
   pitchDamp:       3.4,
   pitchAccelGain:  22,    // stern squats as she accelerates
-  noseDiveDeg:     13,    // bow-down angle where she starts to plough
+  noseDiveDeg:     13,    // bow-down angle where she starts to plough, in flat water
 
   /* --- sea state --- */
   waveLenM:        11,
@@ -625,8 +625,8 @@ function sailPower(a){
   else if (a<=10) lift=lerp(0,0.80,(a-2)/8);
   else if (a<=TUNING.bestAlphaDeg)  lift=lerp(0.80,1,(a-10)/(TUNING.bestAlphaDeg-10));
   else if (a<=TUNING.stallAlphaDeg) lift=1;
-  else if (a<=45) lift=lerp(1,0.55,(a-TUNING.stallAlphaDeg)/(45-TUNING.stallAlphaDeg));
-  else            lift=0.55;
+  else if (a<=45) lift=lerp(1,0.62,(a-TUNING.stallAlphaDeg)/(45-TUNING.stallAlphaDeg));
+  else            lift=0.62;
   return Math.max(lift, 0.90*Math.max(0, Math.cos((a-90)*D2R)));
 }
 /* the sheet angle that puts the sail at its best angle of attack for the
@@ -635,6 +635,7 @@ function sailPower(a){
 function trimTarget(){
   return clamp(Math.abs(telltale.awa)*D2R - 16*D2R, 0, 90*D2R);
 }
+function noseDiveLimit(){ return TUNING.noseDiveDeg + 0.6*TUNING.waveSteepDeg; }
 function flowState(alpha, awa){
   const a = alpha;
   if (Math.abs(awa) > 145) return "running";
@@ -1310,7 +1311,11 @@ function setupTouch(){
     b.addEventListener('pointercancel',off);
     b.addEventListener('pointerleave',off);
   };
-  hold('bUp','boardUp'); hold('bDown','boardDown'); hold('bHike','hike');
+  hold('bUp','boardUp'); hold('bDown','boardDown');
+  // HIKE latches: with one thumb on the tiller and one on the sheet there is
+  // no third to hold a button, so a tap hikes out and a tap sits back in
+  const bh=document.getElementById('bHike');
+  bh.addEventListener('pointerdown',e=>{ touch.hike=!touch.hike; bh.classList.toggle('on',touch.hike); e.preventDefault(); });
 
   // the timer card opens the wind menu, which doubles as a pause screen
   document.getElementById('course').addEventListener('pointerdown',e=>{ openSetup(); e.preventDefault(); });
@@ -1621,7 +1626,7 @@ function howtoCards(){
   const K = {
     keys:  { turn:'<b>A</b> / <b>D</b> or the arrow keys', in:'with <b>W</b>', out:'with <b>S</b>', hike:'<b>Shift</b>', up:'<b>Q</b>', down:'<b>E</b>',
              menu:'<b>M</b>', restart:'<b>R</b>', steerNote:'' },
-    touch: { turn:'the <b>TILLER</b> pad', in:'by sliding the <b>SHEET</b> pad up', out:'by sliding it down', hike:'<b>HIKE</b>', up:'<b>BOARD ▲</b>', down:'<b>BOARD ▼</b>',
+    touch: { turn:'the <b>TILLER</b> pad', in:'by sliding the <b>SHEET</b> pad up', out:'by sliding it down', hike:'a tap on <b>HIKE</b> (tap again to sit in)', up:'<b>BOARD ▲</b>', down:'<b>BOARD ▼</b>',
              menu:'tapping the timer card', restart:'the menu',
              steerNote: tillerInvert ? ' It works like a real tiller: <span class="y">push it away from the side you want to turn to</span>. Swap to “Direct” in the menu if you would rather point where you want to go.' : ' Slide it the way you want the bow to go.' },
     pad:   { turn:'the <b>left stick</b>', in:'with <b>R2</b>', out:'with <b>L2</b>', hike:'the <b>right stick</b>', up:'<b>D-pad ▲</b>', down:'<b>D-pad ▼</b>',
@@ -1836,7 +1841,9 @@ function step(dt){
   /* --- speed ---------------------------------------------- */
   const heelRatio = clamp(Math.abs(boat.heel)*R2D/TUNING.capsizeDeg,0,1);
   const flat = 1 - TUNING.flatBonus*heelRatio*heelRatio;      // flat is fast
-  const nose = boat.pitch*R2D > TUNING.noseDiveDeg ? 0.72 : 1; // ploughing the bow under
+  // ploughing the bow under: a real bury, well beyond what the sea alone
+  // is pitching her, not every wave that comes past in a breeze
+  const nose = boat.pitch*R2D > noseDiveLimit() ? 0.82 : 1;
   const boardBonus = 1+TUNING.boardDragGain*(1-boat.board)*clamp((Math.abs(twa)*R2D-100)/60,0,1);
   /* --- surfing: sliding down the face of a wave -------------
      Only downwind, only with way on, and only once the sea has built
@@ -2556,7 +2563,7 @@ function coachText(d){
   if(twa<32) return ['Too close to the wind — turn away from it','#e04a45'];
   if(telltale.state==='luffing') return ['She is flapping — a bit more sheet ('+ctl('in')+')','#e04a45'];
   if(telltale.state==='stalled') return ['Stalled — ease a touch ('+ctl('out')+')','#f2683a'];
-  if(boat.pitch*R2D>TUNING.noseDiveDeg) return ['Bow is burying — move your weight aft','#f2683a'];
+  if(boat.pitch*R2D>noseDiveLimit()) return ['Bow is burying — ease and come up a little','#f2683a'];
   if(telltale.state==='soft') return ['Trim in a little more ('+ctl('in')+')','#ffd66b'];
   if(twa>160) return ['By the lee — she will roll, come up a bit','#ffd66b'];
   if(twa<70 && shiftDeg*Math.sign(d.twa||1) < -4)
