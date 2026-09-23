@@ -218,7 +218,7 @@
     #coach{font-size:14px;padding:6px 15px;top:calc(10px + env(safe-area-inset-top))}
     #dash{left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));gap:8px}
     #instruments{grid-template-columns:repeat(3,auto);gap:2px 13px;padding:6px 11px}
-    #instruments > div:nth-child(n+4){display:none}
+    #instruments > div:nth-child(4),#instruments > div:nth-child(5){display:none}
     #instruments .num{font-size:16px}
     #windList{gap:7px} .wcard{flex:1 1 88px;padding:8px 6px}
     .wcard .kn{font-size:18px} #setupCard h1{font-size:22px}
@@ -253,6 +253,7 @@
   /* a controller is in use: the on-screen pads get out of the way, and
      come back the moment someone touches the screen again */
   body.pad-on #touch{display:none !important}
+  body.pad-on #keys{display:none}
   @media (pointer:coarse){
     body.pad-on #padHint:not(.hidden){display:block;
       left:calc(14px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom))}
@@ -421,7 +422,8 @@
     <div><div class="label">Heel °</div><div class="num" id="iHeel">0</div></div>
     <div><div class="label">True WA</div><div class="num" id="iTwa">0</div></div>
     <div><div class="label">To mark m</div><div class="num" id="iDist">0</div></div>
-    <div><div class="label">Board %</div><div class="num" id="iBrd">100</div></div>
+    <div><div class="label">Board %</div><div class="num" id="iBrd">100</div>
+      <div class="bar"><div class="fill" id="brdFill" style="background:#8fd9e8"></div></div></div>
   </div>
 </div>
 
@@ -2266,6 +2268,15 @@ function drawBoat(sx,sy,d){
   roundHull(ctx,L,beam,deckDX,fore,deckDY);
   ctx.fillStyle=C.hull; ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.stroke();
 
+  // the daggerboard case, just forward of the thwart: the board's head sticks up out
+  // of it when the board is down, and sits nearly flush when it is pulled up
+  { const bx=deckDX, by=-L*0.10*fore+deckDY, w=L*0.07, h=L*0.20;
+    ctx.fillStyle='rgba(16,51,63,.55)'; ctx.fillRect(bx-w/2, by-h/2, w, h);           // the slot
+    const len=h*(0.25+0.75*boat.board);
+    ctx.fillStyle=boat.board>0.5?C.board:'#f2683a';
+    ctx.fillRect(bx-w*0.32, by-len/2, w*0.64, len);
+    ctx.strokeStyle=C.ink; ctx.lineWidth=1.5; ctx.strokeRect(bx-w/2, by-h/2, w, h); }
+
   // thwart, for a bit of cartoon detail
   ctx.strokeStyle='rgba(16,51,63,.35)'; ctx.lineWidth=2.5;
   ctx.beginPath();
@@ -2903,6 +2914,7 @@ function frame(now){
   set('iTwa',Math.round(Math.abs(d.twa))+(d.twa>=0?'S':'P'));
   set('iDist',Math.round(Math.hypot(goal.x-boat.x,goal.y-boat.y)/TUNING.pxPerM));
   set('iBrd',Math.round(boat.board*100));
+  document.getElementById('brdFill').style.width=(boat.board*64)+'px';
   set('legName', coinMode ? coinLayout : course[wp] ? course[wp].name : 'finish');
   // the wind panel hangs just below the timer card, whatever height the card is
   const cardBottom=document.getElementById('course').getBoundingClientRect().bottom;
