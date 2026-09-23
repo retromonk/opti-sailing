@@ -1972,7 +1972,7 @@ function resize(){
   }
   // zoom out a little on a phone so more of the course fits on screen
   // closer in than before: at 8.5 px/m a 3 kn boat crawled across the screen
-  const ppm = W<900 ? 8.5 : 12.5;
+  const ppm = W<900 ? 11 : 16;
   if(ppm!==TUNING.pxPerM){ TUNING.pxPerM=ppm; resetRun(); }
 }
 addEventListener('resize',resize);
@@ -2596,7 +2596,7 @@ function frame(now){
   const leadPx=boat.spd*(14+9*spdF);
   const cam={ x:boat.x-W/2+lead.x*leadPx, y:boat.y-H/2+lead.y*leadPx };
   // and it closes in a touch as she gets going (not on phones — the screen is tight enough)
-  zoomNow=lerp(zoomNow, 1+(W>=900?0.06:0)*spdF, 1-Math.exp(-2*dts));
+  zoomNow=lerp(zoomNow, 1+(W>=900?0.08:0)*spdF, 1-Math.exp(-2*dts));
   ctx.save(); ctx.translate(W/2,H/2); ctx.scale(zoomNow,zoomNow); ctx.translate(-W/2,-H/2);
   drawWater(cam);
   drawPuffs(cam);
