@@ -1636,12 +1636,12 @@ function howtoCards(){
   const mode = padInUse?'pad':isTouch?'touch':'keys';
   const K = {
     keys:  { turn:'<b>A</b> / <b>D</b> or the arrow keys', in:'with <b>W</b>', out:'with <b>S</b>', hike:'<b>Shift</b>', up:'<b>Q</b>', down:'<b>E</b>',
-             menu:'<b>M</b>', restart:'<b>R</b>', steerNote:'' },
+             menu:'<b>M</b>', restart:'<b>R</b>', lay:'<b>L</b>', steerNote:'' },
     touch: { turn:'the <b>TILLER</b> pad', in:'by sliding the <b>SHEET</b> pad up', out:'by sliding it down', hike:'a tap on <b>HIKE</b> (tap again to sit in)', up:'<b>BOARD ▲</b>', down:'<b>BOARD ▼</b>',
-             menu:'tapping the timer card', restart:'the menu',
+             menu:'tapping the timer card', restart:'the menu', lay:'the menu',
              steerNote: tillerInvert ? ' It works like a real tiller: <span class="y">push it away from the side you want to turn to</span>. Swap to “Direct” in the menu if you would rather point where you want to go.' : ' Slide it the way you want the bow to go.' },
     pad:   { turn:'the <b>left stick</b>', in:'with <b>R2</b>', out:'with <b>L2</b>', hike:'the <b>right stick</b>', up:'<b>D-pad ▲</b>', down:'<b>D-pad ▼</b>',
-             menu:'<b>Share</b>', restart:'<b>Options</b>',
+             menu:'<b>Share</b>', restart:'<b>Options</b>', lay:'<b>△</b>',
              steerNote: tillerInvert ? ' It works like a real tiller: <span class="y">push it away from the side you want to turn to</span>. Swap to “Direct” in the menu if you would rather point where you want to go.' : '' }
   }[mode];
   const noGo = `<svg width="170" height="104" viewBox="0 0 170 104" fill="none" stroke-width="2">
@@ -1662,7 +1662,8 @@ function howtoCards(){
     `<div class="ht"><h2>4 · Keep her flat</h2>Hike out with ${K.hike} when the heel passes about 10°. A heeled boat is a slow boat, and past 60° she goes over. Ease the sheet in a big gust.</div>`,
     `<div class="ht"><h2>5 · Downwind</h2>Run straight down the wind — it is the fastest way home in an Opti. Pull the daggerboard up with ${K.up} (and back down with ${K.down} before you turn upwind).</div>`,
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
-    `<div class="ht"><h2>7 · Racing</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn. Laylines: <b>L</b>. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
+    `<div class="ht"><h2>7 · Time trial</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn.</div>`,
+    `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`
   ].join('');
 }
 function openHowto(){
