@@ -1052,6 +1052,13 @@ function habitsReport(){
          `<div class="tip">${tip}</div>`;
 }
 
+/* a pip each second through the last ten, a horn at zero (the gun has its own sound) */
+function countdownPips(before, after, horn){
+  if(after===before) return;
+  if(after>=1 && after<=10){ SFX.pip(after); if(after<=3) rumble(0.1,0.25,60); }
+  else if(after<=0 && before>=1 && horn) SFX.horn();
+}
+
 /* ============================================================
    GOOD HABITS
    The game already knows when you are sailing well. This is
@@ -1175,6 +1182,9 @@ const SFX=(()=>{
     gun(){ noise(0.25,0.5,600); tone(90,0.3,'sine',0.25,-40); },
     gybe(){ noise(0.18,0.25,1200); },
     surf(){ noise(0.6,0.22,700); },
+    // last-ten-seconds pips: short and clean, higher for the final three
+    pip(n){ tone(n<=3?1175:880, 0.09, 'sine', n<=3?0.2:0.14); },
+    horn(){ tone(440,0.55,'square',0.09); tone(554,0.55,'square',0.06); },
     // the sail flapping: a soft rustle that fades in while she luffs
     flutter(on){ const a=ctxOk(); if(!a) return;
       if(!flutter){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
@@ -2031,13 +2041,17 @@ function step(dt){
   if(coinMode){
     /* ---- coin run: a clock counting down and a lot of collecting ---- */
     raceTime+=dt; clock=raceTime;
+    const secBefore=Math.ceil(coinTime);
     coinTime-=dt;
+    countdownPips(secBefore, Math.ceil(coinTime), true);
     collectCoins(dt);
     if(coinTime<=0 && !boardOpen){ coinTime=0; bestCoins=Math.max(bestCoins,coinScore); openScoreboard(true); }
   } else {
     /* ---- the starting sequence ---- */
     if(phase==='pre'){
+      const secBefore=Math.ceil(countdown);
       countdown-=dt;
+      countdownPips(secBefore, Math.ceil(countdown), false);
       if(countdown<=0){
         countdown=0; phase='racing'; SFX.gun();
         // over the line at the gun? you have to come back and start again
