@@ -2212,7 +2212,7 @@ async function hsRender(){
    inside the three letters. The Firestore rules refuse the same list, so it
    cannot be skipped by writing to the board directly. */
 const BAD_EXACT=new Set(['KKK','KMS']);
-const BAD3=new Set(["ANL", "ARS", "ASS", "AZZ", "BCH", "BJB", "BJS", "BTH", "CNT", "DIK", "DIX", "DKK", "DKS", "FAG", "FAK", "FGT", "FKK", "FKN", "FKR", "FKU", "FUK", "FUQ", "FUX", "HOE", "HRE", "JIZ", "JZZ", "KNT", "KOK", "KOX", "KRP", "KUK", "KUM", "KUX", "KYS", "NGA", "NGG", "NGR", "NIG", "NOB", "PIS", "PNS", "PSS", "PSY", "SEX", "SHT", "SLT", "SLU", "STF", "SUK", "SUX", "SXX", "SXY", "TIT", "TTS", "TWT", "VAG", "WHR", "WTF", "XXX"]), BAD2=new Set(["BJ", "DK", "FK", "FU", "SX"]);
+const BAD3=new Set(["ANL", "ARS", "ASS", "AZZ", "BCH", "BJB", "BJS", "BTH", "CNT", "DIK", "DIX", "DKK", "DKS", "FAG", "FAK", "FGT", "FKK", "FKN", "FKR", "FKU", "FUK", "FUQ", "FUX", "GAY", "HOE", "HRE", "JEW", "JIZ", "JZZ", "KNT", "KOK", "KOX", "KRP", "KUK", "KUM", "KUX", "KYS", "NGA", "NGG", "NGR", "NIG", "NOB", "PIS", "PNS", "PSS", "PSY", "SEX", "SHT", "SLT", "SLU", "STF", "SUK", "SUX", "SXX", "SXY", "TIT", "TTS", "TWT", "VAG", "WHR", "WTF", "XXX"]), BAD2=new Set(["BJ", "DK", "FK", "FU", "SX"]);
 function normInitials(n){
   return n.toUpperCase().replace(/[0134578 9]/g,c=>({'0':'O','1':'I','3':'E','4':'A','5':'S','7':'T','8':'B','9':'G',' ':' '}[c]))
           .replace(/[CQ]/g,'K');
