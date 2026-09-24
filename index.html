@@ -2211,7 +2211,8 @@ async function hsRender(){
    usual dodges: digits for letters (5→S, 1→I, 0→O…), C/K/Q swaps, and spaces
    inside the three letters. The Firestore rules refuse the same list, so it
    cannot be skipped by writing to the board directly. */
-const BAD3=new Set(["ANL", "ARS", "ASS", "AZZ", "BCH", "BJB", "BJS", "BTH", "CNT", "DIK", "DIX", "DKK", "DKS", "FAG", "FAK", "FGT", "FKK", "FKN", "FKR", "FKU", "FUK", "FUQ", "FUX", "HOE", "HRE", "JIZ", "JZZ", "KKK", "KMS", "KNT", "KOK", "KOX", "KRP", "KUK", "KUM", "KUX", "KYS", "NGA", "NGG", "NGR", "NIG", "NOB", "PIS", "PNS", "PSS", "PSY", "SEX", "SHT", "SLT", "SLU", "STF", "SUK", "SUX", "SXX", "SXY", "TIT", "TTS", "TWT", "VAG", "WHR", "WTF", "XXX"]), BAD2=new Set(["BJ", "DK", "FK", "FU", "SX"]);
+const BAD_EXACT=new Set(['KKK','KMS']);
+const BAD3=new Set(["ANL", "ARS", "ASS", "AZZ", "BCH", "BJB", "BJS", "BTH", "CNT", "DIK", "DIX", "DKK", "DKS", "FAG", "FAK", "FGT", "FKK", "FKN", "FKR", "FKU", "FUK", "FUQ", "FUX", "HOE", "HRE", "JIZ", "JZZ", "KNT", "KOK", "KOX", "KRP", "KUK", "KUM", "KUX", "KYS", "NGA", "NGG", "NGR", "NIG", "NOB", "PIS", "PNS", "PSS", "PSY", "SEX", "SHT", "SLT", "SLU", "STF", "SUK", "SUX", "SXX", "SXY", "TIT", "TTS", "TWT", "VAG", "WHR", "WTF", "XXX"]), BAD2=new Set(["BJ", "DK", "FK", "FU", "SX"]);
 function normInitials(n){
   return n.toUpperCase().replace(/[0134578 9]/g,c=>({'0':'O','1':'I','3':'E','4':'A','5':'S','7':'T','8':'B','9':'G',' ':' '}[c]))
           .replace(/[CQ]/g,'K');
@@ -2219,6 +2220,8 @@ function normInitials(n){
 function initialsOk(n){
   const t=normInitials(n), squashed=t.replace(/ /g,'');
   if(BAD3.has(t) || BAD3.has(squashed)) return false;
+  const raw=n.toUpperCase().replace(/[01357]/g,c=>({'0':'O','1':'I','3':'E','5':'S','7':'T'}[c]));
+  if(BAD_EXACT.has(raw) || BAD_EXACT.has(raw.replace(/ /g,''))) return false;   // no C/K swaps for these, so CCC stays fine
   for(let i=0;i+2<=squashed.length;i++) if(BAD2.has(squashed.slice(i,i+2))) return false;
   return true;
 }
