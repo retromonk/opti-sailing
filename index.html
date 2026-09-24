@@ -1119,7 +1119,9 @@ const SURV_UPGRADES = [
   { id:'fender', name:'Orbiting fender',icon:'🛟', text:l=>l===0?'A fender circles the boat, bashing gunk':'One more fender' },
   { id:'magnet', name:'Sparkle magnet', icon:'✨', text:l=>'Pull sparkles in from further away' },
   { id:'hull',   name:'Stout hull',     icon:'❤️', text:l=>'+1 heart, and patch one up' },
-  { id:'bottom', name:'Clean bottom',   icon:'🚤', text:l=>'Sail 4% faster' }
+  { id:'bottom', name:'Clean bottom',   icon:'🚤', text:l=>'Sail 4% faster' },
+  { id:'spray',  name:'Bow spray',      icon:'💧', text:l=>l===0?'Above 2.8 kn the bow throws a cone of spray ahead':'Wider, harder spray' },
+  { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
 let SURV = null, survPick = null;
@@ -1127,11 +1129,12 @@ let SURV = null, survPick = null;
 function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
-           up:{wake:0,trail:0,boom:0,squirt:0,fender:0,magnet:0,hull:0,bottom:0} };
+           spit:[], lobs:[], splashes:[], sprayT:0, lobT:0,
+           up:{wake:0,trail:0,boom:0,squirt:0,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0} };
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
-function survSpeedMul(){ return survMode && SURV ? 1+0.04*survLvl('bottom') : 1; }
+function survSpeedMul(){ return survMode && SURV ? (1+0.04*survLvl('bottom'))*(SURV.fouled>0?0.75:1) : 1; }
 
 function spawnGunk(){
   const P=TUNING.pxPerM, t=SURV.t;
@@ -1143,15 +1146,20 @@ function spawnGunk(){
   else if(r0<0.55) a = boat.hdg + (Math.random()*2-1)*0.7;              // across your bow
   const u = vecOf(a);
   const roll=Math.random();
-  const kind = t>100 && roll<Math.min(0.04+t/3000,0.15) ? 'big' : t>40 && roll<Math.min(0.2+t/800,0.45) ? 'mid' : 'small';
-  const K = { small:{hp:1, r:1.3, spd:1.0, xp:1}, mid:{hp:4, r:1.9, spd:0.85, xp:3}, big:{hp:14, r:3.0, spd:0.7, xp:10} }[kind];
+  const pBig = t>100 ? Math.min(0.04+t/3000,0.15) : 0;
+  const pSpit= t>55  ? Math.min(0.06+t/2500,0.16) : 0;
+  const pMid = t>40  ? Math.min(0.2+t/800,0.45)   : 0;
+  const kind = roll<pBig ? 'big' : roll<pBig+pSpit ? 'spit' : roll<pBig+pSpit+pMid ? 'mid' : 'small';
+  const K = { small:{hp:1, r:1.3, spd:1.0, xp:1}, mid:{hp:4, r:1.9, spd:0.85, xp:3}, big:{hp:14, r:3.0, spd:0.7, xp:10},
+              spit:{hp:3, r:1.6, spd:0.9, xp:4} }[kind];
   const toughen = 1 + t/150;
   SURV.gunk.push({ x:boat.x+u.x*viewR*P, y:boat.y+u.y*viewR*P, kind, hp:K.hp*toughen, max:K.hp*toughen,
-                   r:K.r, spd:K.spd, xp:K.xp, flash:0, wob:Math.random()*6.3, fenderHit:0 });
+                   r:K.r, spd:K.spd, xp:K.xp, flash:0, wob:Math.random()*6.3, fenderHit:0, fireT:2+Math.random()*2 });
 }
 
-function hurtHull(){
+function hurtHull(src){
   if(SURV.invuln>0) return;
+  SURV.hitsBy=SURV.hitsBy||{}; SURV.hitsBy[src||'gunk']=(SURV.hitsBy[src||'gunk']||0)+1;
   SURV.hp--; SURV.invuln=1.0; boat.spd*=0.65;
   rumble(0.9,0.6,260); SFX.splash(); cheer('Ouch!','#e04a45',true);
   if(SURV.hp<=0) survOver();
@@ -1167,7 +1175,7 @@ function hitGunk(g,dmg){ g.hp-=dmg; g.flash=0.12; if(g.hp<=0 && !g.dead) killGun
 function stepSurv(dt){
   const S=SURV, P=TUNING.pxPerM, k=KN*P;
   if(S.over) return;
-  S.t+=dt; S.invuln=Math.max(0,S.invuln-dt);
+  S.t+=dt; S.invuln=Math.max(0,S.invuln-dt); S.fouled=Math.max(0,(S.fouled||0)-dt);
 
   // the swarm grows
   const rate = Math.min(1.4 + S.t*0.035, 8);
@@ -1179,7 +1187,8 @@ function stepSurv(dt){
   const base = Math.min(1.7 + S.t*0.009, 3.6);
   for(const g of S.gunk){
     const dx=boat.x-g.x, dy=boat.y-g.y, dd=Math.hypot(dx,dy)||1;
-    const s=base*g.spd;
+    let s=base*g.spd;
+    if(g.kind==='spit'){ const m=dd/P; s = m<13 ? -0.7*s : m<19 ? 0 : s; }     // hang back at range
     g.x += (dx/dd*s + dw.x*0.55)*k*dt;
     g.y += (dy/dd*s + dw.y*0.55)*k*dt;
     g.wob+=dt*3; g.flash=Math.max(0,g.flash-dt); g.fenderHit=Math.max(0,g.fenderHit-dt);
@@ -1207,6 +1216,7 @@ function stepSurv(dt){
     const gybe = Math.abs(telltale.awa)>100;
     const R = (5 + 1.4*survLvl('boom'))*P*(gybe?1.6:1), dmg=(2.5+1.5*survLvl('boom'))*(gybe?1.5:1);
     S.rings.push({x:boat.x,y:boat.y,R,t:0});
+    for(const o of S.spit) if(Math.hypot(o.x-boat.x,o.y-boat.y)<R){ o.done=true; }
     for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-boat.x,g.y-boat.y)<R+g.r*P){
       hitGunk(g,dmg); const a=angOf(g.x-boat.x,g.y-boat.y), u=vecOf(a); g.x+=u.x*2*P; g.y+=u.y*2*P; }
     SFX.gybe();
@@ -1233,14 +1243,17 @@ function stepSurv(dt){
     if(S.squirtT<=0){
       let near=null, nd=16*P;
       for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y); if(d<nd){nd=d; near=g;} }
-      if(near){ const u=vecOf(angOf(near.x-boat.x,near.y-boat.y)); S.shots.push({x:boat.x,y:boat.y,vx:u.x*20*P,vy:u.y*20*P,t:0}); S.squirtT=Math.max(0.3,1.3-0.2*survLvl('squirt')); }
+      if(near){ const u=vecOf(angOf(near.x-boat.x,near.y-boat.y)), bvv=vecOf(boat.hdg);
+        S.shots.push({x:boat.x,y:boat.y,vx:u.x*18*P+bvv.x*boat.spd*k,vy:u.y*18*P+bvv.y*boat.spd*k,t:0,life:1.2,dmg:2+0.5*survLvl('squirt'),r:4});
+        S.squirtT=Math.max(0.3,1.3-0.2*survLvl('squirt')); }
     }
   }
-  for(const s of S.shots){
-    s.x+=s.vx*dt; s.y+=s.vy*dt; s.t+=dt;
-    for(const g of S.gunk) if(!g.dead && !s.done && Math.hypot(g.x-s.x,g.y-s.y)<g.r*P+6){ hitGunk(g,2+0.5*survLvl('squirt')); s.done=true; }
-  }
-  S.shots=S.shots.filter(s=>!s.done && s.t<1.2);
+  { const windAcc0=2.2*P*(wind.spdKn/10);
+    for(const s of S.shots){
+      s.vx+=dw.x*windAcc0*dt; s.vy+=dw.y*windAcc0*dt; s.x+=s.vx*dt; s.y+=s.vy*dt; s.t+=dt;
+      for(const g of S.gunk) if(!g.dead && !s.done && Math.hypot(g.x-s.x,g.y-s.y)<g.r*P+6){ hitGunk(g,s.dmg); s.done=true; }
+    }
+    S.shots=S.shots.filter(s=>!s.done && s.t<s.life); }
 
   // FENDERS orbit the boat
   const nf=survLvl('fender');
@@ -1248,6 +1261,66 @@ function stepSurv(dt){
     const a=simTime*2.4+i*Math.PI*2/nf, fx=boat.x+Math.cos(a)*4.5*P, fy=boat.y+Math.sin(a)*4.5*P;
     for(const g of S.gunk) if(!g.dead && g.fenderHit<=0 && Math.hypot(g.x-fx,g.y-fy)<g.r*P+0.9*P){ hitGunk(g,2.2); g.fenderHit=0.4; }
   }
+
+  /* ---- projectiles. Everything in flight is carried by the wind: shots
+     fired downwind fly further, upwind ones fall short, and your own shots
+     keep the boat's speed. ---- */
+  const windAcc = 2.2*P*(wind.spdKn/10);                  // px/s² downwind
+  const bv = vecOf(boat.hdg), boatV={x:bv.x*boat.spd*k, y:bv.y*boat.spd*k};
+  const fly = o=>{ o.vx+=dw.x*windAcc*dt; o.vy+=dw.y*windAcc*dt; o.x+=o.vx*dt; o.y+=o.vy*dt; o.t+=dt; };
+
+  // BOW SPRAY: only when she is really moving
+  if(survLvl('spray')>0 && boat.spd>2.8 && !boat.capsized){
+    S.sprayT-=dt;
+    if(S.sprayT<=0){
+      S.sprayT=Math.max(0.2,0.38-0.035*survLvl('spray'));
+      const n=2+survLvl('spray'), spread=(18+4*survLvl('spray'))*D2R;
+      for(let i=0;i<n;i++){ const a=boat.hdg+(n>1?(i/(n-1)-0.5):0)*2*spread, u=vecOf(a);
+        S.shots.push({x:boat.x+bv.x*1.6*P,y:boat.y+bv.y*1.6*P,vx:u.x*13*P+boatV.x,vy:u.y*13*P+boatV.y,t:0,life:0.55,dmg:0.8+0.45*survLvl('spray'),r:3}); }
+    }
+  }
+  // SPONGE LOB: an arcing sponge into the thickest gunk, splashing a patch
+  if(survLvl('lob')>0){
+    S.lobT-=dt;
+    if(S.lobT<=0){
+      let best=null, bestN=0;
+      for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y)/P; if(d>22) continue;
+        let n=0; for(const h of S.gunk) if(!h.dead && Math.hypot(h.x-g.x,h.y-g.y)<4*P) n++;
+        if(n>bestN){bestN=n; best=g;} }
+      if(best){ const T=0.9, dx=best.x-boat.x, dy=best.y-boat.y;
+        // aimed for still air; the wind will carry it off a little — that is the point
+        S.lobs.push({x:boat.x,y:boat.y,vx:dx/T,vy:dy/T,t:0,T});
+        S.lobT=Math.max(0.9,2.4-0.3*survLvl('lob')); }
+    }
+  }
+  for(const l of S.lobs){ fly(l);
+    if(l.t>=l.T){ l.done=true; const R=(2.6+0.6*survLvl('lob'))*P;
+      S.splashes.push({x:l.x,y:l.y,R,t:0});
+      for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-l.x,g.y-l.y)<R+g.r*P) hitGunk(g,3+1.6*survLvl('lob')); } }
+  S.lobs=S.lobs.filter(l=>!l.done);
+  S.splashes=S.splashes.filter(p=>(p.t+=dt)<0.45);
+
+  // SPITTERS lob gloop at you — slow, wind-borne, and a tack swats it away
+  for(const g of S.gunk){
+    if(g.dead || g.kind!=='spit') continue;
+    g.fireT-=dt;
+    const d=Math.hypot(boat.x-g.x,boat.y-g.y);
+    if(g.fireT<=0 && d<24*P){
+      g.fireT=3.4+Math.random()*1.6;
+      // lead the boat a little, aim high into the wind — then the breeze decides
+      const lead=0.5, tx=boat.x+boatV.x*lead, ty=boat.y+boatV.y*lead, a=angOf(tx-g.x,ty-g.y), u=vecOf(a);
+      S.spit.push({x:g.x,y:g.y,vx:u.x*5*P,vy:u.y*5*P,t:0,life:4.2});
+      g.flash=0.1;
+    }
+  }
+  for(const o of S.spit){ fly(o);
+    if(!o.done && Math.hypot(o.x-boat.x,o.y-boat.y)<1.25*P){ o.done=true;
+      // gloop fouls the sail: she loses a quarter of her speed for a few seconds.
+      // Only a second splat while she is still fouled costs a heart.
+      if(S.fouled>0) hurtHull('gloop');
+      else { S.fouled=3; cheer('Sail fouled!','#b07ac7',true); SFX.splash(); rumble(0.4,0.3,160); }
+    } }
+  S.spit=S.spit.filter(o=>!o.done && o.t<o.life);
 
   // SPARKLES: pulled in when close, worth more on a flat-and-fast streak
   const mag=(3+2*survLvl('magnet'))*P;
@@ -1353,7 +1426,7 @@ function drawSurv(cam){
     for(let i=0;i<=14;i++){ const a=i/14*Math.PI*2, rr=R*(1+0.12*Math.sin(a*3+g.wob)+0.06*Math.sin(a*5-g.wob*1.3));
       i?ctx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr):ctx.moveTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr); }
     ctx.closePath();
-    ctx.fillStyle = g.flash>0 ? '#fffaf0' : g.kind==='big' ? '#6a3f7a' : g.kind==='mid' ? '#5b6e2e' : '#6f8f3a';
+    ctx.fillStyle = g.flash>0 ? '#fffaf0' : g.kind==='big' ? '#6a3f7a' : g.kind==='spit' ? '#8a4f9e' : g.kind==='mid' ? '#5b6e2e' : '#6f8f3a';
     ctx.fill(); ctx.strokeStyle='rgba(16,51,63,.8)'; ctx.lineWidth=2; ctx.stroke();
     // eyes that follow you
     const u=vecOf(angOf(boat.x-g.x,boat.y-g.y)), er=Math.max(2.2,R*0.22);
@@ -1362,11 +1435,32 @@ function drawSurv(cam){
       ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex,ey,er,0,7); ctx.fill();
       ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(ex+u.x*er*0.45,ey+u.y*er*0.45,er*0.5,0,7); ctx.fill();
     }
+    if(g.kind==='spit'){ ctx.fillStyle=C.ink; ctx.beginPath(); ctx.ellipse(x,y+R*0.35,R*0.22,R*0.16*(g.fireT<0.5?1.6:1),0,0,7); ctx.fill(); }
     if(g.max>1.5 && g.hp<g.max){ ctx.fillStyle='rgba(16,51,63,.7)'; ctx.fillRect(x-R,y+R+4,R*2,3); ctx.fillStyle='#e04a45'; ctx.fillRect(x-R,y+R+4,R*2*g.hp/g.max,3); }
   }
-  // squirts
+  // squirts and spray
   ctx.fillStyle='#bfe9f5';
-  for(const s of S.shots){ ctx.beginPath(); ctx.arc(s.x-cam.x,s.y-cam.y,4,0,7); ctx.fill(); }
+  for(const s of S.shots){ ctx.globalAlpha=1-s.t/s.life*0.6; ctx.beginPath(); ctx.arc(s.x-cam.x,s.y-cam.y,s.r,0,7); ctx.fill(); }
+  ctx.globalAlpha=1;
+  // sponges in flight: a shadow on the water and the sponge up in the air
+  for(const l of S.lobs){
+    const f=l.t/l.T, h=Math.sin(f*Math.PI)*3.5*P, x=l.x-cam.x, y=l.y-cam.y;
+    ctx.fillStyle='rgba(16,51,63,.35)'; ctx.beginPath(); ctx.ellipse(x,y,7,4,0,0,7); ctx.fill();
+    ctx.save(); ctx.translate(x,y-h); ctx.rotate(f*7);
+    ctx.fillStyle='#ffd66b'; ctx.fillRect(-7,-5,14,10); ctx.strokeStyle=C.ink; ctx.lineWidth=2; ctx.strokeRect(-7,-5,14,10);
+    ctx.restore();
+  }
+  for(const p of S.splashes){ const f=p.t/0.45;
+    ctx.fillStyle=`rgba(191,233,245,${0.35*(1-f)})`; ctx.beginPath(); ctx.arc(p.x-cam.x,p.y-cam.y,p.R*(0.5+0.5*f),0,7); ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${0.8*(1-f)})`; ctx.lineWidth=3; ctx.stroke(); }
+  // gloop from the spitters, with its drip trail
+  for(const o of S.spit){
+    const x=o.x-cam.x, y=o.y-cam.y, sp=Math.hypot(o.vx,o.vy)||1;
+    ctx.strokeStyle='rgba(176,122,199,.45)'; ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-o.vx/sp*14,y-o.vy/sp*14); ctx.stroke();
+    ctx.fillStyle='#b07ac7'; ctx.beginPath(); ctx.arc(x,y,6+Math.sin(o.t*14)*0.8,0,7); ctx.fill();
+    ctx.strokeStyle=C.ink; ctx.lineWidth=1.5; ctx.stroke();
+  }
   // fenders
   const nf=survLvl('fender');
   for(let i=0;i<nf;i++){
@@ -1377,6 +1471,9 @@ function drawSurv(cam){
 }
 function drawSurvOverlay(cam){
   const S=SURV;
+  if(S.fouled>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, a=Math.min(1,S.fouled);
+    ctx.fillStyle=`rgba(176,122,199,${0.75*a})`;
+    for(const [ox,oy,r] of [[-6,-4,6],[5,3,5],[1,-12,4]]){ ctx.beginPath(); ctx.arc(bx+ox,by+oy,r,0,7); ctx.fill(); } }
   // hearts over the boat, blinking while you are hurt
   const bx=boat.x-cam.x, by=boat.y-cam.y-46;
   if(!(S.invuln>0 && Math.floor(simTime*10)%2)){
@@ -2159,7 +2256,7 @@ function howtoCards(){
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
     `<div class="ht"><h2>7 · Time trial</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn.</div>`,
     `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`,
-    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Grab the sparkles to level up and pick upgrades.</div>`
+    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Grab the sparkles to level up and pick upgrades. From about a minute in, purple <b>spitters</b> hang back and lob gloop. A splat fouls your sail and slows you for a few seconds, and a second one while you are fouled costs a heart. Gloop drifts downwind like everything in flight, so read the breeze, and a tack swats it out of the air.</div>`
   ].join('');
 }
 function openHowto(){
@@ -3046,7 +3143,8 @@ function drawMap(){
     mctx.strokeStyle='rgba(255,255,255,.12)'; mctx.beginPath(); mctx.arc(cx,cy,Math.min(w,h)/2-6,0,7); mctx.stroke();
     mctx.fillStyle=C.sun; for(const g of SURV.gems){ const x=cx+(g.x-boat.x)*sc, y=cy+(g.y-boat.y)*sc; if(x>0&&y>0&&x<w&&y<h) mctx.fillRect(x-1,y-1,2,2); }
     for(const g of SURV.gunk){ const x=cx+(g.x-boat.x)*sc, y=cy+(g.y-boat.y)*sc; if(x<0||y<0||x>w||y>h) continue;
-      mctx.fillStyle=g.kind==='big'?'#b07ac7':'#9ccf5a'; mctx.beginPath(); mctx.arc(x,y,g.kind==='big'?3:g.kind==='mid'?2.2:1.6,0,7); mctx.fill(); }
+      mctx.fillStyle=g.kind==='big'||g.kind==='spit'?'#b07ac7':'#9ccf5a'; mctx.beginPath(); mctx.arc(x,y,g.kind==='big'?3:g.kind==='mid'?2.2:1.6,0,7); mctx.fill(); }
+    mctx.fillStyle='#f2683a'; for(const o of SURV.spit){ const x=cx+(o.x-boat.x)*sc, y=cy+(o.y-boat.y)*sc; mctx.fillRect(x-1.5,y-1.5,3,3); }
     mctx.save(); mctx.translate(cx,cy); mctx.rotate(boat.hdg); mctx.fillStyle='#fff'; mctx.beginPath();
     mctx.moveTo(0,-6); mctx.lineTo(4,5); mctx.lineTo(-4,5); mctx.closePath(); mctx.fill(); mctx.restore();
     return;
