@@ -1174,11 +1174,18 @@ function spawnGunk(){
 }
 
 const RAM_KN = 2.4;
+const SURV_INVULN = 3;          // seconds of shield after losing a heart
 function hurtHull(src,why){
   if(SURV.invuln>0) return;
   if(why) cheer(why,'#e04a45',true);
   SURV.hitsBy=SURV.hitsBy||{}; SURV.hitsBy[src||'gunk']=(SURV.hitsBy[src||'gunk']||0)+1;
-  SURV.hp--; SURV.invuln=1.0; boat.spd*=0.65;
+  SURV.hp--; SURV.invuln=SURV_INVULN; boat.spd*=0.65;
+  // a shockwave clears some space: gunk shoved out to ~10 m, gloop popped
+  { const P=TUNING.pxPerM, R=10*P;
+    for(const g of SURV.gunk){ const dx=g.x-boat.x, dy=g.y-boat.y, d=Math.hypot(dx,dy)||1;
+      if(d<R){ g.x=boat.x+dx/d*R; g.y=boat.y+dy/d*R; g.flash=0.15; } }
+    for(const o of SURV.spit) if(Math.hypot(o.x-boat.x,o.y-boat.y)<R*1.2) o.done=true;
+    SURV.rings.push({x:boat.x,y:boat.y,R:R*1.1,t:0}); }
   rumble(0.9,0.6,260); SFX.splash(); if(!why) cheer('Ouch!','#e04a45',true);
   if(SURV.hp<=0) survOver();
 }
@@ -1246,6 +1253,8 @@ function stepSurv(dt){
   for(const g of S.gunk){
     if(g.dead) continue;
     const d=Math.hypot(g.x-boat.x,g.y-boat.y);
+    if(S.invuln>0 && d < 4*P+g.r*P){                       // the shield bubble
+      const u=vecOf(angOf(g.x-boat.x,g.y-boat.y)); g.x=boat.x+u.x*(4*P+g.r*P); g.y=boat.y+u.y*(4*P+g.r*P); continue; }
     if(d < hullR+g.r*P){
       if(boat.spd>RAM_KN && !boat.capsized){
         hitGunk(g, 2*boat.spd);
@@ -1502,9 +1511,14 @@ function drawSurv(cam){
 }
 function drawSurvOverlay(cam){
   const S=SURV;
+  if(S.invuln>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, R=4*TUNING.pxPerM, f=S.invuln/SURV_INVULN;
+    ctx.fillStyle=`rgba(223,244,248,${0.10+0.08*Math.sin(simTime*9)})`; ctx.beginPath(); ctx.arc(bx,by,R,0,7); ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*f})`; ctx.lineWidth=3; ctx.setLineDash([10,6]); ctx.lineDashOffset=-simTime*30;
+    ctx.beginPath(); ctx.arc(bx,by,R,0,7); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset=0; }
   { // the ram: a bright arc across the bow when you are fast enough, a red ring when you are not
     const bx=boat.x-cam.x, by=boat.y-cam.y, L=2.3*TUNING.pxPerM*2.1, R=L*0.66, h=boat.hdg-Math.PI/2;   // L: the drawn boat length
-    if(boat.spd>RAM_KN && !boat.capsized){
+    if(S.invuln>0){ /* the shield says it all */ }
+    else if(boat.spd>RAM_KN && !boat.capsized){
       const pulse=0.75+0.25*Math.sin(simTime*10);
       ctx.strokeStyle=`rgba(255,214,107,${pulse})`; ctx.lineWidth=7; ctx.lineCap='round';
       ctx.beginPath(); ctx.arc(bx,by,R,h-0.7,h+0.7); ctx.stroke();
@@ -1520,7 +1534,7 @@ function drawSurvOverlay(cam){
     for(const [ox,oy,r] of [[-6,-4,6],[5,3,5],[1,-12,4]]){ ctx.beginPath(); ctx.arc(bx+ox,by+oy,r,0,7); ctx.fill(); } }
   // hearts over the boat, blinking while you are hurt
   const bx=boat.x-cam.x, by=boat.y-cam.y-46;
-  if(!(S.invuln>0 && Math.floor(simTime*10)%2)){
+  if(!(S.invuln>0 && Math.floor(simTime*6)%2)){
     ctx.font='15px sans-serif'; ctx.textAlign='center';
     const row='❤'.repeat(Math.max(0,S.hp))+'♡'.repeat(Math.max(0,S.maxHp-S.hp));
     ctx.lineWidth=3; ctx.strokeStyle='rgba(16,51,63,.8)'; ctx.strokeText(row,bx,by);
@@ -3418,7 +3432,10 @@ function frame(now){
 
   if(coinMode) drawCoins(cam);
   if(survMode && SURV) drawSurv(cam);
+  const shielded = survMode && SURV && SURV.invuln>0;
+  if(shielded) ctx.globalAlpha = Math.floor(simTime*12)%2 ? 0.35 : 1;          // she flashes while shielded
   drawBoat(boat.x-cam.x, boat.y-cam.y, d);
+  ctx.globalAlpha = 1;
   if(survMode && SURV) drawSurvOverlay(cam);
   drawCheers(cam);
   if(survMode){ /* the swarm finds you — no pointer needed */ }
