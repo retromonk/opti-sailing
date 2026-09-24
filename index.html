@@ -1157,11 +1157,13 @@ function spawnGunk(){
                    r:K.r, spd:K.spd, xp:K.xp, flash:0, wob:Math.random()*6.3, fenderHit:0, fireT:2+Math.random()*2 });
 }
 
-function hurtHull(src){
+const RAM_KN = 2.4;
+function hurtHull(src,why){
   if(SURV.invuln>0) return;
+  if(why) cheer(why,'#e04a45',true);
   SURV.hitsBy=SURV.hitsBy||{}; SURV.hitsBy[src||'gunk']=(SURV.hitsBy[src||'gunk']||0)+1;
   SURV.hp--; SURV.invuln=1.0; boat.spd*=0.65;
-  rumble(0.9,0.6,260); SFX.splash(); cheer('Ouch!','#e04a45',true);
+  rumble(0.9,0.6,260); SFX.splash(); if(!why) cheer('Ouch!','#e04a45',true);
   if(SURV.hp<=0) survOver();
 }
 function killGunk(g){
@@ -1175,7 +1177,7 @@ function hitGunk(g,dmg){ g.hp-=dmg; g.flash=0.12; if(g.hp<=0 && !g.dead) killGun
 function stepSurv(dt){
   const S=SURV, P=TUNING.pxPerM, k=KN*P;
   if(S.over) return;
-  S.t+=dt; S.invuln=Math.max(0,S.invuln-dt); S.fouled=Math.max(0,(S.fouled||0)-dt);
+  S.t+=dt; S.invuln=Math.max(0,S.invuln-dt); S.fouled=Math.max(0,(S.fouled||0)-dt); S.flash=Math.max(0,(S.flash||0)-dt);
 
   // the swarm grows
   const rate = Math.min(1.4 + S.t*0.035, 8);
@@ -1229,11 +1231,12 @@ function stepSurv(dt){
     if(g.dead) continue;
     const d=Math.hypot(g.x-boat.x,g.y-boat.y);
     if(d < hullR+g.r*P){
-      if(boat.spd>2.4 && !boat.capsized){
+      if(boat.spd>RAM_KN && !boat.capsized){
         hitGunk(g, 2*boat.spd);
+        if(g.dead){ if(S.invuln<=0 && simTime-(S.ramCheer||0)>0.6){ S.ramCheer=simTime; cheer('Rammed!','#3fb877',true); } }
         // it bounces off — but anything tough enough to survive the ram still dents you
-        if(!g.dead){ const u=vecOf(angOf(g.x-boat.x,g.y-boat.y)); g.x+=u.x*2.5*P; g.y+=u.y*2.5*P; boat.spd*=0.85; hurtHull(); }
-      } else hurtHull();
+        else { const u=vecOf(angOf(g.x-boat.x,g.y-boat.y)); g.x+=u.x*2.5*P; g.y+=u.y*2.5*P; boat.spd*=0.85; hurtHull('gunk','Too tough to ram!'); }
+      } else hurtHull('gunk', boat.capsized ? 'Capsized — no defence!' : 'Too slow to ram!');
     }
   }
 
@@ -1248,7 +1251,8 @@ function stepSurv(dt){
         const lv=survLvl('squirt'), n=lv>=5?3:lv>=3?2:1, a0=angOf(near.x-boat.x,near.y-boat.y), bvv=vecOf(boat.hdg);
         for(let i=0;i<n;i++){ const u=vecOf(a0+(n>1?(i/(n-1)-0.5)*0.28:0));
           S.shots.push({x:boat.x,y:boat.y,vx:u.x*18*P+bvv.x*boat.spd*k,vy:u.y*18*P+bvv.y*boat.spd*k,t:0,life:1.7,dmg:1.2+0.6*lv,r:4}); }
-        S.squirtT=1.8-0.26*(lv-1); SFX.pew(); }
+        S.squirtT=1.8-0.26*(lv-1); SFX.pew();
+        const uf=vecOf(a0); S.flash=0.12; S.flashX=uf.x*14; S.flashY=uf.y*14; }
     }
   }
   { const windAcc0=2.2*P*(wind.spdKn/10);
@@ -1320,7 +1324,7 @@ function stepSurv(dt){
     if(!o.done && Math.hypot(o.x-boat.x,o.y-boat.y)<1.25*P){ o.done=true;
       // gloop fouls the sail: she loses a quarter of her speed for a few seconds.
       // Only a second splat while she is still fouled costs a heart.
-      if(S.fouled>0) hurtHull('gloop');
+      if(S.fouled>0) hurtHull('gloop','Gloop again!');
       else { S.fouled=3; cheer('Sail fouled!','#b07ac7',true); SFX.splash(); rumble(0.4,0.3,160); }
     } }
   S.spit=S.spit.filter(o=>!o.done && o.t<o.life);
@@ -1441,10 +1445,19 @@ function drawSurv(cam){
     if(g.kind==='spit'){ ctx.fillStyle=C.ink; ctx.beginPath(); ctx.ellipse(x,y+R*0.35,R*0.22,R*0.16*(g.fireT<0.5?1.6:1),0,0,7); ctx.fill(); }
     if(g.max>1.5 && g.hp<g.max){ ctx.fillStyle='rgba(16,51,63,.7)'; ctx.fillRect(x-R,y+R+4,R*2,3); ctx.fillStyle='#e04a45'; ctx.fillRect(x-R,y+R+4,R*2*g.hp/g.max,3); }
   }
-  // squirts and spray
-  ctx.fillStyle='#bfe9f5';
-  for(const s of S.shots){ ctx.globalAlpha=1-s.t/s.life*0.6; ctx.beginPath(); ctx.arc(s.x-cam.x,s.y-cam.y,s.r,0,7); ctx.fill(); }
+  // bullets and spray: bold, outlined, with a streak behind so you can follow them
+  for(const s of S.shots){
+    const x=s.x-cam.x, y=s.y-cam.y, sp=Math.hypot(s.vx,s.vy)||1, big=s.r>=4;
+    ctx.globalAlpha=1-s.t/s.life*0.5;
+    ctx.strokeStyle= big ? 'rgba(255,214,107,.55)' : 'rgba(255,255,255,.55)'; ctx.lineWidth=big?4:3; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-s.vx/sp*(big?18:10), y-s.vy/sp*(big?18:10)); ctx.stroke();
+    ctx.fillStyle= big ? '#ffd66b' : '#ffffff';
+    ctx.beginPath(); ctx.arc(x,y,big?6:4,0,7); ctx.fill();
+    ctx.strokeStyle=C.ink; ctx.lineWidth=2; ctx.stroke();
+  }
   ctx.globalAlpha=1;
+  if(S.flash>0){ const bx=boat.x-cam.x, by=boat.y-cam.y;
+    ctx.fillStyle=`rgba(255,214,107,${S.flash/0.12})`; ctx.beginPath(); ctx.arc(bx+S.flashX,by+S.flashY,9,0,7); ctx.fill(); }
   // sponges in flight: a shadow on the water and the sponge up in the air
   for(const l of S.lobs){
     const f=l.t/l.T, h=Math.sin(f*Math.PI)*3.5*P, x=l.x-cam.x, y=l.y-cam.y;
@@ -1474,6 +1487,19 @@ function drawSurv(cam){
 }
 function drawSurvOverlay(cam){
   const S=SURV;
+  { // the ram: a bright arc across the bow when you are fast enough, a red ring when you are not
+    const bx=boat.x-cam.x, by=boat.y-cam.y, L=2.3*TUNING.pxPerM*2.1, R=L*0.66, h=boat.hdg-Math.PI/2;   // L: the drawn boat length
+    if(boat.spd>RAM_KN && !boat.capsized){
+      const pulse=0.75+0.25*Math.sin(simTime*10);
+      ctx.strokeStyle=`rgba(255,214,107,${pulse})`; ctx.lineWidth=7; ctx.lineCap='round';
+      ctx.beginPath(); ctx.arc(bx,by,R,h-0.7,h+0.7); ctx.stroke();
+      ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(bx,by,R+7,h-0.45,h+0.45); ctx.stroke();
+    } else {
+      ctx.strokeStyle='rgba(224,74,69,.8)'; ctx.lineWidth=3; ctx.setLineDash([7,6]);
+      ctx.beginPath(); ctx.arc(bx,by,R,0,7); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
   if(S.fouled>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, a=Math.min(1,S.fouled);
     ctx.fillStyle=`rgba(176,122,199,${0.75*a})`;
     for(const [ox,oy,r] of [[-6,-4,6],[5,3,5],[1,-12,4]]){ ctx.beginPath(); ctx.arc(bx+ox,by+oy,r,0,7); ctx.fill(); } }
@@ -2260,7 +2286,7 @@ function howtoCards(){
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
     `<div class="ht"><h2>7 · Time trial</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn.</div>`,
     `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`,
-    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Your bailer fires at the nearest gunk on a steady beat — slow at first, faster with upgrades. Grab the sparkles to level up and pick upgrades. From about a minute in, purple <b>spitters</b> hang back and lob gloop. A splat fouls your sail and slows you for a few seconds, and a second one while you are fouled costs a heart. Gloop drifts downwind like everything in flight, so read the breeze, and a tack swats it out of the air.</div>`
+    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). Over 2.4 kn a <b>gold arc</b> lights up on the bow: <b>ram</b> gunk and it pops. Without it (a dashed red ring round the boat) any gunk you touch costs a heart. Gunk drifts downwind, so it comes fastest from upwind. Your bailer fires at the nearest gunk on a steady beat — slow at first, faster with upgrades. Grab the sparkles to level up and pick upgrades. From about a minute in, purple <b>spitters</b> hang back and lob gloop. A splat fouls your sail and slows you for a few seconds, and a second one while you are fouled costs a heart. Gloop drifts downwind like everything in flight, so read the breeze, and a tack swats it out of the air.</div>`
   ].join('');
 }
 function openHowto(){
@@ -3206,6 +3232,10 @@ const CTL={
 function ctl(k){ return CTL[padInUse?'pad':isTouch?'touch':'keys'][k]; }
 function coachText(d){
   if(boat.capsized) return ['Capsized — she will come back up','#e04a45'];
+  if(survMode && SURV && !SURV.over){
+    if(boat.spd>RAM_KN) return ['Ram ready — the bow pops gunk','#ffd66b'];
+    if(boat.spd>RAM_KN-0.6) return ['Nearly fast enough to ram — keep her moving','#f2683a'];
+  }
   const twa=Math.abs(d.twa), hd=Math.abs(boat.heel*R2D);
   if(hd>TUNING.capsizeDeg-8) return ['She is going over — dump the sheet ('+ctl('out')+')','#e04a45'];
   if(hd>30) return [assist?'Too much heel — ease the sheet ('+ctl('out')+')':'Too much heel — hike out ('+ctl('hike')+')','#e04a45'];
@@ -3349,7 +3379,7 @@ function frame(now){
   const col   = frac>0.92?'#3fb877':frac>0.75?'#ffd66b':'#f2683a';
   spdFill.style.width=(clamp(boat.spd/TUNING.maxBoatKn,0,1)*64)+'px';
   spdFill.style.background=col;
-  spdTick.style.left=(clamp(reach/TUNING.maxBoatKn,0,1)*64-1)+'px';
+  spdTick.style.left=(clamp((survMode?RAM_KN:reach)/TUNING.maxBoatKn,0,1)*64-1)+'px';
   document.getElementById('iSpd').style.color=col;
   set('iSpd',boat.spd.toFixed(1)); set('iVmg',vmg.toFixed(1));
   set('iHeel',Math.round(Math.abs(boat.heel*R2D)));
