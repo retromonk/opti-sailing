@@ -353,6 +353,7 @@
   #hsHabits .tip{margin-top:6px;font-size:12.5px;color:var(--sun);line-height:1.4}
   #hsHabits .bonus{font-size:12px;color:rgba(255,255,255,.6);margin-top:4px}
   #hsEntry{display:flex;justify-content:center;gap:12px;margin:0 0 14px}
+  #hsEntry.bad .ch{border-color:var(--port)!important;color:var(--port)!important;animation:none}
   .slot{display:flex;flex-direction:column;align-items:center;gap:2px}
   .slot .arw{font-size:15px;color:rgba(255,255,255,.55);padding:2px 12px;cursor:pointer;user-select:none;
     border-radius:8px;touch-action:none}
@@ -2200,17 +2201,41 @@ async function hsRender(){
   if(rows===null){ list.innerHTML='<div class="empty">Could not reach the scoreboard</div>'; return null; }
   list.innerHTML = rows.length ? rows.map((r,i)=>
     `<div class="hr${r.id===hsMyId?' me':''}"><span>${String(i+1).padStart(2,' ')}.</span>`+
-    `<span>${String(r.name||'???').slice(0,3)}</span><span class="w">${hsWindLabel(r)}</span>`+
+    `<span>${shownName(r.name)}</span><span class="w">${hsWindLabel(r)}</span>`+
     `<span class="sc">${hsScoreCell(r)}</span></div>`).join('')
   : '<div class="empty">No scores yet — be the first</div>';
   return rows;
 }
+
+/* Initials that spell something rude are refused. The check sees through the
+   usual dodges: digits for letters (5→S, 1→I, 0→O…), C/K/Q swaps, and spaces
+   inside the three letters. The Firestore rules refuse the same list, so it
+   cannot be skipped by writing to the board directly. */
+const BAD_EXACT=new Set(['KKK','KMS']);
+const BAD3=new Set(["ANL", "ARS", "ASS", "AZZ", "BCH", "BJB", "BJS", "BTH", "CNT", "DIK", "DIX", "DKK", "DKS", "FAG", "FAK", "FGT", "FKK", "FKN", "FKR", "FKU", "FUK", "FUQ", "FUX", "HOE", "HRE", "JIZ", "JZZ", "KNT", "KOK", "KOX", "KRP", "KUK", "KUM", "KUX", "KYS", "NGA", "NGG", "NGR", "NIG", "NOB", "PIS", "PNS", "PSS", "PSY", "SEX", "SHT", "SLT", "SLU", "STF", "SUK", "SUX", "SXX", "SXY", "TIT", "TTS", "TWT", "VAG", "WHR", "WTF", "XXX"]), BAD2=new Set(["BJ", "DK", "FK", "FU", "SX"]);
+function normInitials(n){
+  return n.toUpperCase().replace(/[0134578 9]/g,c=>({'0':'O','1':'I','3':'E','4':'A','5':'S','7':'T','8':'B','9':'G',' ':' '}[c]))
+          .replace(/[CQ]/g,'K');
+}
+function initialsOk(n){
+  const t=normInitials(n), squashed=t.replace(/ /g,'');
+  if(BAD3.has(t) || BAD3.has(squashed)) return false;
+  const raw=n.toUpperCase().replace(/[01357]/g,c=>({'0':'O','1':'I','3':'E','5':'S','7':'T'}[c]));
+  if(BAD_EXACT.has(raw) || BAD_EXACT.has(raw.replace(/ /g,''))) return false;   // no C/K swaps for these, so CCC stays fine
+  for(let i=0;i+2<=squashed.length;i++) if(BAD2.has(squashed.slice(i,i+2))) return false;
+  return true;
+}
+const shownName=n=> initialsOk(String(n||'')) ? String(n||'???').slice(0,3) : '???';
 
 function hsRenderEntry(){
   const box=HS('hsEntry');
   box.innerHTML = hsName.split('').map((c,i)=>
     `<div class="slot${i===hsSlot?' cur':''}" data-i="${i}">`+
     `<div class="arw" data-d="1">▲</div><div class="ch">${c===' '?'&nbsp;':c}</div><div class="arw" data-d="-1">▼</div></div>`).join('');
+  const ok=initialsOk(hsName);
+  box.classList.toggle('bad',!ok);
+  HS('hsSave').disabled=!ok || hsSaving;
+  if(hsEntering) HS('hsNote').textContent = ok ? (store().shared?'':HS('hsNote').dataset.base||'') : 'Those initials are not allowed — pick different ones';
 }
 function hsSpin(d){
   const i=HS_CHARS.indexOf(hsName[hsSlot]), n=HS_CHARS.length;
@@ -2234,9 +2259,10 @@ async function openScoreboard(afterRun, kind){
   HS('setup').classList.add('hidden');
   HS('hiscore').classList.remove('hidden');
   HS('hsClose').textContent = afterRun ? 'Sail again' : 'Back';
-  const setNote=()=>{ HS('hsNote').textContent = store().shared ? '' :
+  const setNote=()=>{ const t = store().shared ? '' :
     (window.scoreStoreError ? 'Scoreboard offline — scores saved on this device only'
-                            : 'Scores saved on this device only for now'); };
+                            : 'Scores saved on this device only for now');
+    HS('hsNote').textContent=t; HS('hsNote').dataset.base=t; };
   setNote();
   HS('hsScore').textContent = !afterRun ? '' : surv ? `Level ${SURV.level} · ${fmt(SURV.t)}` : coinScore+' coins';
   HS('hsHabits').classList.toggle('show',!!afterRun);
@@ -2269,6 +2295,7 @@ function closeScoreboard(){
 }
 async function hsSubmit(){
   if(!hsEntering||hsSaving) return;
+  if(!initialsOk(hsName)){ hsRenderEntry(); SFX.tick(); rumble(0.3,0.3,120); return; }
   hsSaving=true; HS('hsSave').disabled=true; HS('hsSave').textContent='Saving…';
   const name=hsName.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').padEnd(3).slice(0,3);
   try{ localStorage.setItem('opti-initials',name); }catch(e){}
