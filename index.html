@@ -1137,6 +1137,7 @@ const SURV_UPGRADES = [
   { id:'hull',   name:'Stout hull',     icon:'❤️', text:l=>'+1 heart, and patch one up' },
   { id:'bottom', name:'Clean bottom',   icon:'🚤', text:l=>'Sail 4% faster' },
   { id:'spray',  name:'Bow spray',      icon:'💧', text:l=>l===0?'Above 2.8 kn the bow throws a cone of spray ahead':'Wider, harder spray' },
+  { id:'ties',   name:'Sail ties',      icon:'🪢', text:l=>`Gloop fouls the sail for ${(3-0.4*(l+1)).toFixed(1)}s (was ${(3-0.4*l).toFixed(1)}s) and slows you ${25-3*(l+1)}% (was ${25-3*l}%)` },
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
@@ -1146,11 +1147,11 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0} };   // you start with the bailer
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0} };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
-function survSpeedMul(){ return survMode && SURV ? (1+0.04*survLvl('bottom'))*(SURV.fouled>0?0.75:1) : 1; }
+function survSpeedMul(){ return survMode && SURV ? (1+0.04*survLvl('bottom'))*(SURV.fouled>0?0.75+0.03*survLvl('ties'):1) : 1; }
 
 function spawnGunk(){
   const P=TUNING.pxPerM, t=SURV.t;
@@ -1350,7 +1351,7 @@ function stepSurv(dt){
       // gloop fouls the sail: she loses a quarter of her speed for a few seconds.
       // Only a second splat while she is still fouled costs a heart.
       if(S.fouled>0) hurtHull('gloop','Gloop again!');
-      else { S.fouled=3; cheer('Sail fouled!','#b07ac7',true); SFX.splash(); rumble(0.4,0.3,160); }
+      else { S.fouled=3-0.4*survLvl('ties'); cheer('Sail fouled!','#b07ac7',true); SFX.splash(); rumble(0.4,0.3,160); }
     } }
   S.spit=S.spit.filter(o=>!o.done && o.t<o.life);
 
