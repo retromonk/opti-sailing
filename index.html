@@ -689,6 +689,19 @@ if(cfg && cfg.projectId && !/^PASTE/.test(cfg.projectId) && !/^PASTE/.test(cfg.a
         return ref.id;
       }
     };
+    // Gunk swarm: highest level reached, ties broken by the longer time afloat
+    const scol=collection(db,'survScores');
+    window.survStore={
+      shared:true,
+      async top(n){
+        const snap=await getDocs(query(scol,orderBy('level','desc'),limit(n*3)));
+        return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.level-a.level||b.t-a.t).slice(0,n);
+      },
+      async add(e){
+        const ref=await addDoc(scol,{name:e.name,level:e.level,t:e.t,ts:serverTimestamp()});
+        return ref.id;
+      }
+    };
   }catch(err){ window.scoreStoreError=err; console.warn('High scores: Firebase failed to load',err); }
 }
 document.dispatchEvent(new Event('scorestore-ready'));
@@ -1385,9 +1398,7 @@ function levelUpPad(e){
   if(e.ok||e.start) takeUpgrade(survPick.sel);
 }
 document.addEventListener('keydown',e=>{
-  if(!survPick && !(SURV&&SURV.over)) return;
-  if(SURV && SURV.over){ e.stopPropagation(); e.preventDefault(); if(e.repeat || performance.now()-(SURV.overAt||0)<900) return;
-    if(['Enter','Escape'].includes(e.key)) survAgain(e.key==='Escape'); return; }
+  if(!survPick) return;
   e.stopPropagation(); e.preventDefault();
   const k=e.key;
   // A and D steer, so they never move the choice; held keys (auto-repeat) never count
@@ -1404,15 +1415,9 @@ function survOver(){
   const S=SURV; S.over=true; S.overAt=performance.now();
   const prev=survBest(), isBest=!prev || S.t>prev.t;
   if(isBest) try{ localStorage.setItem('opti-surv-best',JSON.stringify({t:S.t,cleared:S.cleared,level:S.level})); }catch(e){}
-  const el=document.getElementById('lvlup'); el.classList.remove('hidden');
-  el.innerHTML=`<div id="luCard"><h1>Swamped!</h1>`+
-    `<p class="big">${fmt(S.t)}</p><p class="sub">afloat · ${S.cleared} gunk cleared · level ${S.level}</p>`+
-    (isBest?`<p class="best">New best!</p>`:prev?`<p class="sub">Your best: ${fmt(prev.t)}</p>`:'')+
-    `<div class="btns"><button id="luAgain">Sail again</button><button id="luMenu" class="ghost">Menu</button></div>`+
-    `<p class="sub keys">${padInUse?'✕ sail again · ○ menu':''}</p></div>`;
-  document.getElementById('luAgain').addEventListener('click',()=>survAgain(false));
-  document.getElementById('luMenu').addEventListener('click',()=>survAgain(true));
+  document.getElementById('lvlup').classList.add('hidden');
   SFX.horn();
+  openScoreboard(true,'surv');
 }
 function survAgain(toMenu){
   document.getElementById('lvlup').classList.add('hidden');
@@ -2116,8 +2121,6 @@ function pollPad(){
   if(g.buttons.some(b=>b&&b.pressed) || g.axes.some(a=>Math.abs(a)>0.3)) setPadInUse(true);
 
   if(howtoOpen){ if(e.ok||e.back||e.menu||e.start) closeHowto(); return; }
-  if(survMode && SURV && SURV.over){ if(performance.now()-(SURV.overAt||0)<900) return;
-    if(e.ok||e.start) survAgain(false); else if(e.back||e.menu) survAgain(true); return; }
   if(survPick){ levelUpPad({left:e.dleft, right:e.dright, ok:e.ok, start:e.start}); return; }
   if(padcardOpen){ if(e.ok||e.back||e.menu||e.start) closePadcard(); return; }
   if(boardOpen){ boardPad(e); return; }
@@ -2146,7 +2149,7 @@ function rumble(s,w,ms){
    ============================================================ */
 const HS_N=10, HS_MAX_SCORE=500;
 const HS_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
-let boardOpen=false, hsEntering=false, hsSlot=0, hsSaving=false, hsMyId=null, hsFromSetup=false;
+let hsOpenedAt=0, boardOpen=false, hsEntering=false, hsSlot=0, hsSaving=false, hsMyId=null, hsFromSetup=false;
 let hsName=(()=>{ try{ return (localStorage.getItem('opti-initials')||'AAA').padEnd(3).slice(0,3); }catch(e){ return 'AAA'; } })();
 const HS=(id)=>document.getElementById(id);
 
@@ -2161,9 +2164,32 @@ const localStore={
     return id;
   }
 };
-const store=()=>window.scoreStore||localStore;
+const localSurvStore={
+  shared:false,
+  key:'opti-hiscores-surv',
+  read(){ try{ return JSON.parse(localStorage.getItem(this.key)||'[]'); }catch(e){ return []; } },
+  async top(n){ return this.read().sort((a,b)=>b.level-a.level||b.t-a.t).slice(0,n); },
+  async add(e){
+    const l=this.read(); const id='l'+Date.now(); l.push({...e,id,ts:Date.now()});
+    try{ localStorage.setItem(this.key,JSON.stringify(l.sort((a,b)=>b.level-a.level||b.t-a.t).slice(0,50))); }catch(err){}
+    return id;
+  }
+};
+/* which board is up: the coin run's or the swarm's. If the shared swarm board
+   refuses us (its Firestore rules not published yet) we quietly keep the
+   scores on this device instead. */
+let hsKind='coins', survShareFailed=false;
+const store=()=>{
+  if(hsKind!=='surv') return window.scoreStore||localStore;
+  if(!window.survStore || survShareFailed) return localSurvStore;
+  return { shared:true,
+    async top(n){ try{ return await window.survStore.top(n); }catch(e){ survShareFailed=true; console.warn('swarm board',e); return localSurvStore.top(n); } },
+    async add(x){ try{ return await window.survStore.add(x); }catch(e){ survShareFailed=true; console.warn('swarm board',e); return localSurvStore.add(x); } } };
+};
+const beats=(r,row)=> hsKind==='surv' ? (r.level>row.level || (r.level===row.level && r.t>row.t)) : r.score>row.score;
 
-function hsWindLabel(e){ return `${e.wind} kn · ${e.shifts}`; }
+function hsWindLabel(e){ return hsKind==='surv' ? `${fmt(e.t||0).replace(/\.\d$/,'')} afloat` : `${e.wind} kn · ${e.shifts}`; }
+const hsScoreCell=e=> hsKind==='surv' ? 'Lv '+e.level : e.score;
 
 async function hsRender(){
   const list=HS('hsList');
@@ -2175,7 +2201,7 @@ async function hsRender(){
   list.innerHTML = rows.length ? rows.map((r,i)=>
     `<div class="hr${r.id===hsMyId?' me':''}"><span>${String(i+1).padStart(2,' ')}.</span>`+
     `<span>${String(r.name||'???').slice(0,3)}</span><span class="w">${hsWindLabel(r)}</span>`+
-    `<span class="sc">${r.score}</span></div>`).join('')
+    `<span class="sc">${hsScoreCell(r)}</span></div>`).join('')
   : '<div class="empty">No scores yet — be the first</div>';
   return rows;
 }
@@ -2201,25 +2227,30 @@ HS('hsEntry').addEventListener('pointerdown',e=>{
   e.preventDefault();
 });
 
-async function openScoreboard(afterRun){
-  boardOpen=true; paused=true; hsFromSetup=!afterRun; hsMyId=null; hsSaving=false;
+async function openScoreboard(afterRun, kind){
+  hsKind = kind || (survMode ? 'surv' : 'coins');
+  const surv = hsKind==='surv';
+  boardOpen=true; paused=true; hsFromSetup=!afterRun; hsMyId=null; hsSaving=false; hsOpenedAt=performance.now();
   HS('setup').classList.add('hidden');
   HS('hiscore').classList.remove('hidden');
   HS('hsClose').textContent = afterRun ? 'Sail again' : 'Back';
-  HS('hsNote').textContent = store().shared ? '' :
+  const setNote=()=>{ HS('hsNote').textContent = store().shared ? '' :
     (window.scoreStoreError ? 'Scoreboard offline — scores saved on this device only'
-                            : 'Scores saved on this device only until Firebase is set up');
-  HS('hsScore').textContent = afterRun ? coinScore+' coins' : '';
+                            : 'Scores saved on this device only for now'); };
+  setNote();
+  HS('hsScore').textContent = !afterRun ? '' : surv ? `Level ${SURV.level} · ${fmt(SURV.t)}` : coinScore+' coins';
   HS('hsHabits').classList.toggle('show',!!afterRun);
   if(afterRun) HS('hsHabits').innerHTML=habitsReport();
-  HS('hsSub').textContent = afterRun ? 'Time up!' : 'Coin run · '+COIN_SEC+' seconds';
+  HS('hsSub').textContent = afterRun ? (surv?'Swamped!':'Time up!') : surv ? 'Gunk swarm · highest level reached' : 'Coin run · '+COIN_SEC+' seconds';
   HS('hsEntry').innerHTML=''; HS('hsSave').style.display='none'; hsEntering=false;
   HS('hsList').innerHTML='<div class="empty">Loading…</div>';
   setPadFocus(null);
   const rows=await hsRender();
   if(!boardOpen) return;
-  const qualifies = afterRun && !assist && coinScore>0 &&
-    (rows===null || rows.length<HS_N || coinScore>rows[rows.length-1].score);
+  setNote();
+  const mine = surv ? {level:SURV.level, t:SURV.t} : {score:coinScore};
+  const qualifies = afterRun && !assist && (surv ? SURV.level>1 : coinScore>0) &&
+    (rows===null || rows.length<HS_N || beats(mine,rows[rows.length-1]));
   if(afterRun && assist) HS('hsSub').textContent='Crew assist was on — turn it off to enter the high scores';
   if(qualifies){
     hsEntering=true; hsSlot=0;
@@ -2242,12 +2273,15 @@ async function hsSubmit(){
   const name=hsName.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').padEnd(3).slice(0,3);
   try{ localStorage.setItem('opti-initials',name); }catch(e){}
   if(assist) return;                                // never onto the board with the crew helping
-  const entry={name, score:Math.round(coinScore), wind:WINDS[windPick].kn, shifts:SHIFTS[shiftPick].name};
+  const surv = hsKind==='surv';
+  const entry= surv ? {name, level:SURV.level, t:Math.round(SURV.t)}
+                    : {name, score:Math.round(coinScore), wind:WINDS[windPick].kn, shifts:SHIFTS[shiftPick].name};
   try{
     hsMyId=await store().add(entry);
     hsEntering=false;
     HS('hsEntry').innerHTML=''; HS('hsSave').style.display='none';
-    HS('hsSub').textContent='Saved — '+name+' · '+entry.score+' coins';
+    HS('hsSub').textContent='Saved — '+name+' · '+(surv?'level '+entry.level:entry.score+' coins');
+    HS('hsNote').textContent = store().shared ? '' : 'Saved on this device — the shared swarm board is not switched on yet';
     await hsRender();
   }catch(err){
     console.warn(err);
@@ -2343,6 +2377,7 @@ document.addEventListener('scorestore-ready',()=>{ if(boardOpen&&!hsEntering) op
 document.addEventListener('keydown',e=>{
   if(!boardOpen) return;
   e.stopPropagation();
+  if(e.repeat || performance.now()-hsOpenedAt<900){ e.preventDefault(); return; }   // keys held as the run ended
   const k=e.key;
   if(k==='Escape'){ closeScoreboard(); return; }
   if(!hsEntering){ if(k==='Enter'||k===' ') closeScoreboard(); return; }
@@ -2360,6 +2395,7 @@ document.addEventListener('keydown',e=>{
 });
 /* and the controller: D-pad spins and moves, ✕ saves, ○ goes back */
 function boardPad(e){
+  if(performance.now()-hsOpenedAt<900) return;
   if(e.back){ closeScoreboard(); return; }
   if(!hsEntering){ if(e.ok||e.start||e.menu) closeScoreboard(); return; }
   if(e.up) hsSpin(1); if(e.down) hsSpin(-1);
