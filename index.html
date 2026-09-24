@@ -1115,7 +1115,7 @@ const SURV_UPGRADES = [
   { id:'wake',   name:'Churning wake',  icon:'🌊', text:l=>`Wake hits ${Math.round(35)}% harder and ${l>1?'wider still':'wider'}` },
   { id:'trail',  name:'Long wake',      icon:'〰️', text:l=>`Your wake lasts ${0.5}s longer` },
   { id:'boom',   name:'Boom sweep',     icon:'↺', text:l=>`Tacks and gybes sweep a bigger ring, harder` },
-  { id:'squirt', name:'Bailer squirt',  icon:'💦', text:l=>l===0?'Squirts the nearest gunk every second or so':'Squirts faster' },
+  { id:'squirt', name:'Bailer shot',    icon:'💦', text:l=>l===2?'Fires faster and harder — and two shots at a time':l===4?'Fires faster and harder — and three shots at a time':'Fires faster and harder' },
   { id:'fender', name:'Orbiting fender',icon:'🛟', text:l=>l===0?'A fender circles the boat, bashing gunk':'One more fender' },
   { id:'magnet', name:'Sparkle magnet', icon:'✨', text:l=>'Pull sparkles in from further away' },
   { id:'hull',   name:'Stout hull',     icon:'❤️', text:l=>'+1 heart, and patch one up' },
@@ -1130,7 +1130,7 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0,
-           up:{wake:0,trail:0,boom:0,squirt:0,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0} };
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0} };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1241,11 +1241,14 @@ function stepSurv(dt){
   if(survLvl('squirt')>0){
     S.squirtT-=dt;
     if(S.squirtT<=0){
-      let near=null, nd=16*P;
+      let near=null, nd=28*P;
       for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y); if(d<nd){nd=d; near=g;} }
-      if(near){ const u=vecOf(angOf(near.x-boat.x,near.y-boat.y)), bvv=vecOf(boat.hdg);
-        S.shots.push({x:boat.x,y:boat.y,vx:u.x*18*P+bvv.x*boat.spd*k,vy:u.y*18*P+bvv.y*boat.spd*k,t:0,life:1.2,dmg:2+0.5*survLvl('squirt'),r:4});
-        S.squirtT=Math.max(0.3,1.3-0.2*survLvl('squirt')); }
+      if(near){
+        // a steady beat: slow to start, faster and harder with each upgrade, and a spread at levels 3 and 5
+        const lv=survLvl('squirt'), n=lv>=5?3:lv>=3?2:1, a0=angOf(near.x-boat.x,near.y-boat.y), bvv=vecOf(boat.hdg);
+        for(let i=0;i<n;i++){ const u=vecOf(a0+(n>1?(i/(n-1)-0.5)*0.28:0));
+          S.shots.push({x:boat.x,y:boat.y,vx:u.x*18*P+bvv.x*boat.spd*k,vy:u.y*18*P+bvv.y*boat.spd*k,t:0,life:1.7,dmg:1.2+0.6*lv,r:4}); }
+        S.squirtT=1.8-0.26*(lv-1); SFX.pew(); }
     }
   }
   { const windAcc0=2.2*P*(wind.spdKn/10);
@@ -1613,6 +1616,7 @@ const SFX=(()=>{
     gybe(){ noise(0.18,0.25,1200); },
     surf(){ noise(0.6,0.22,700); },
     // last-ten-seconds pips: short and clean, higher for the final three
+    pew(){ tone(760,0.05,'triangle',0.05,-260); },
     pip(n){ tone(n<=3?1175:880, 0.09, 'sine', n<=3?0.2:0.14); },
     horn(){ tone(440,0.55,'square',0.09); tone(554,0.55,'square',0.06); },
     // the sail flapping: a soft rustle that fades in while she luffs
@@ -2256,7 +2260,7 @@ function howtoCards(){
     `<div class="ht"><h2>6 · Coin run</h2>90 seconds. The coins trace a racecourse: <span class="o">3-pointers</span> zigzag up the beat, <span class="y">2s</span> on the reaches, <span class="y">1s</span> on the run. Nobody clears it all — 30 is solid, 40 is good, 50 is close to the limit. The mini map shows where they are.</div>`,
     `<div class="ht"><h2>7 · Time trial</h2>Cross the start line after the gun (over early and you must come back), round the marks in order, and beat your best time. Touching a mark costs a penalty turn.</div>`,
     `<div class="ht"><h2>8 · Laylines</h2>When you are beating to a mark, two dashed lines fan out from it at 45° — the <em>laylines</em>. Sail up the middle, and the moment you cross one, tack: from there you can lay the mark in one go without a wasted tack. Show or hide them with ${K.lay}. Menu: ${K.menu}. Restart: ${K.restart}.</div>`,
-    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Grab the sparkles to level up and pick upgrades. From about a minute in, purple <b>spitters</b> hang back and lob gloop. A splat fouls your sail and slows you for a few seconds, and a second one while you are fouled costs a heart. Gloop drifts downwind like everything in flight, so read the breeze, and a tack swats it out of the air.</div>`
+    `<div class="ht"><h2>9 · Gunk swarm</h2>Survive the ooze. Your <b>wake</b> scours gunk — the faster you sail, the harder it hits. Every <b>tack or gybe</b> sweeps a ring clear (gybes clear more). <b>Ram</b> at over 2.4 kn and it pops; bump it slowly and you lose a heart. Gunk drifts downwind, so it comes fastest from upwind. Your bailer fires at the nearest gunk on a steady beat — slow at first, faster with upgrades. Grab the sparkles to level up and pick upgrades. From about a minute in, purple <b>spitters</b> hang back and lob gloop. A splat fouls your sail and slows you for a few seconds, and a second one while you are fouled costs a heart. Gloop drifts downwind like everything in flight, so read the breeze, and a tack swats it out of the air.</div>`
   ].join('');
 }
 function openHowto(){
