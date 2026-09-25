@@ -3103,13 +3103,20 @@ function stepFish(dt){
   fishSpawnT-=dt;
   if(fishSpawnT<=0 && !SCHOOLS.some(s=>!s.used && !s.pink)){ spawnSchool(); fishSpawnT=35+Math.random()*30; }
   /* Pink schools, swarm only: their fish mends a heart. They keep their own
-     clock, since a hurt boat rarely lasts long: the first comes 12–20 s after
-     you lose a heart, then at most one every 40–60 s while you are still hurt. */
+     clock, and it runs faster the fewer hearts you have. One heart down, the
+     first comes after 16–20 s and then every 60–70 s; on your last heart,
+     after 4–8 s and then every 15–25 s. Losing a heart pulls the next one in. */
   if(survMode && SURV && !SURV.over){
     const hurt = SURV.hp<SURV.maxHp, pinkOut = SCHOOLS.some(s=>s.pink && !s.used);
+    const u = clamp((SURV.hp-1)/Math.max(1,SURV.maxHp-2),0,1);   // 0 on your last heart, 1 one heart down
+    const first = lerp(4,16,u)+Math.random()*4, next = lerp(15,60,u)+Math.random()*10;
     if(!hurt) pinkT=-1;
-    else if(pinkT<0) pinkT=12+Math.random()*8;
-    else if(!pinkOut && (pinkT-=dt)<=0){ spawnSchool(true); pinkT=40+Math.random()*20; }
+    else if(pinkT<0) pinkT=first;
+    else {
+      if(SURV.hp<(SURV.pinkHp??SURV.maxHp)) pinkT=Math.min(pinkT,first);   // just lost one
+      if(!pinkOut && (pinkT-=dt)<=0){ spawnSchool(true); pinkT=next; }
+    }
+    SURV.pinkHp=SURV.hp;
   }
   const bv=vecOf(boat.hdg);
   for(const sc of SCHOOLS){
