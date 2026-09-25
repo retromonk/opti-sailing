@@ -116,11 +116,39 @@
     justify-content:center;padding:24px;background:rgba(10,42,54,.86);backdrop-filter:blur(9px)}
   /* an ID beats a class, so this rule has to be at least as specific as #setup */
   #setup.hidden{display:none}
-  #setupCard{max-width:660px;width:100%;text-align:center}
+  #setupCard,#settingsCard{max-width:720px;width:100%;text-align:center;max-height:100%;overflow:auto}
+  #settingsCard.hidden,#setupCard.hidden{display:none}
+  #brand,#brand2{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 8px}
+  #brand .logo,#brand2 .logo{font-size:34px;filter:drop-shadow(0 3px 0 rgba(6,28,36,.5));animation:bob 3s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(-4px) rotate(-4deg)}}
+  #brand h1,#brand2 h1{font-size:30px!important;letter-spacing:.06em;margin:0!important;text-shadow:0 3px 0 rgba(6,28,36,.5)}
+  .rowlabel{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5);margin:10px 0 6px}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  #setup .tile{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.85);border:3px solid rgba(255,255,255,.18);
+    border-radius:18px;padding:12px 8px 10px;box-shadow:0 5px 0 rgba(6,28,36,.45);display:flex;flex-direction:column;
+    align-items:center;gap:3px;font-weight:500;font-size:15px;transition:transform .12s,border-color .12s}
+  #setup .tile .i{font-size:34px;line-height:1.1}
+  #setup .tile .s{font-size:11.5px;color:rgba(255,255,255,.6);font-weight:400}
+  #setup .tile.on{border-color:var(--sun);background:rgba(34,86,102,.95);transform:translateY(-3px)}
+  #setup .tile.on .s{color:var(--sun)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  #setup .chip{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.85);border:2px solid rgba(255,255,255,.18);
+    border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500;box-shadow:none;display:flex;gap:6px;align-items:center}
+  #setup .chip .k{font-family:"IBM Plex Mono",monospace;font-size:11px;color:rgba(255,255,255,.55)}
+  #setup .chip.on{background:var(--sun);color:var(--ink);border-color:var(--ink)} #setup .chip.on .k{color:rgba(16,51,63,.7)}
+  .gorow{margin:14px 0 4px}
+  #setup button.go{font-size:20px;padding:12px 38px;border-radius:999px}
+  .icons{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+  #setup .ic{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.7);border:2px solid rgba(255,255,255,.18);
+    border-radius:14px;padding:6px 10px;min-width:78px;box-shadow:none;display:flex;flex-direction:column;align-items:center;gap:1px;font-weight:500}
+  #setup .ic .i{font-size:20px;line-height:1.2} #setup .ic .t{font-size:11px;color:rgba(255,255,255,.75)}
+  #setup .tile:active,#setup .chip:active,#setup .ic:active{transform:translateY(2px)}
+  #setup .pad-focus{outline:3px solid var(--sun);outline-offset:3px}
+  #settingsCard #fields{max-width:520px;margin:0 auto}
   #setupCard h1{font-size:24px;font-weight:600;margin:0 0 3px}
   #setupCard .sub{color:rgba(255,255,255,.6);font-size:13px;margin:0 0 14px;line-height:1.45}
 
-  #fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px}
+  #fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
   .field{text-align:left;min-width:0}
   .field label{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
     color:rgba(255,255,255,.5);margin:0 0 5px 3px}
@@ -147,6 +175,11 @@
 
   /* landscape phones are short, so tighten everything up */
   @media (max-height:460px){
+    #brand{margin-bottom:4px} #brand .logo{font-size:24px} #brand h1,#brand2 h1{font-size:22px!important}
+    #setup .tile{padding:6px 6px 5px;border-radius:14px;font-size:13px} #setup .tile .i{font-size:24px} #setup .tile .s{font-size:10px}
+    .tiles{gap:7px} .rowlabel{margin:6px 0 4px} #setup .chip{padding:4px 10px;font-size:12.5px}
+    .gorow{margin:8px 0 2px} #setup button.go{font-size:16px;padding:8px 26px}
+    .icons{margin-top:6px;gap:6px} #setup .ic{min-width:62px;padding:3px 6px} #setup .ic .i{font-size:16px} #setup .ic .t{font-size:9.5px}
     #setup{padding:10px}
     #setupCard h1{font-size:19px;margin-bottom:1px}
     #setupCard .sub{font-size:11.5px;margin-bottom:9px}
@@ -483,38 +516,47 @@
           <li>Then <b>hold the ☰ Menu button</b> until Edge says <i>Use game controls</i> — that hands the controller to the game.</li></ol>
       <button id="xboxFs">⛶ Go fullscreen</button>
     </div>
-    <h1>Set up your sail</h1>
-    <p class="sub" id="modeNote"></p>
-    <div id="fields">
-      <div class="field"><label>Game</label>
-        <div class="sel-wrap"><select id="selMode"></select></div></div>
-      <div class="field"><label>Wind</label>
-        <div class="sel-wrap"><select id="selWind"></select></div></div>
-      <div class="field"><label>Shifts</label>
-        <div class="sel-wrap"><select id="selShift"></select></div></div>
-      <div class="field"><label>Steering</label>
-        <div class="sel-wrap"><select id="selTiller"></select></div></div>
-      <div class="field"><label>Crew assist</label>
-        <div class="sel-wrap"><select id="selAssist"></select></div></div>
-      <div class="field"><label>Sound</label>
-        <div class="sel-wrap"><select id="selSound"></select></div></div>
-      <div class="field" id="fLay"><label>Laylines</label>
-        <div class="sel-wrap"><select id="selLay"></select></div></div>
-      <div class="field" id="fCourse"><label>Course</label>
-        <div class="sel-wrap"><select id="selCourse"></select></div></div>
-    </div>
+    <div id="brand"><span class="logo">⛵</span><h1>Opti</h1></div>
+    <div id="modeTiles" class="tiles"></div>
+    <p class="sub" id="modeNote" style="margin-top:8px"></p>
+    <div class="rowlabel">Wind</div>
+    <div id="windChips" class="chips"></div>
     <p id="windNote" class="sub"></p>
+    <div id="courseBlock"><div class="rowlabel">Course</div><div id="courseChips" class="chips"></div></div>
+    <div class="gorow"><button id="goBtn" class="go">⛵ Go sailing</button></div>
+    <div class="icons">
+      <button id="restartBtn" class="ic"><span class="i">↺</span><span class="t">Restart</span></button>
+      <button id="hsBtn" class="ic"><span class="i">🏆</span><span class="t">Scores</span></button>
+      <button id="htBtn" class="ic"><span class="i">❓</span><span class="t">How to play</span></button>
+      <button id="pcBtn" class="ic"><span class="i">🎮</span><span class="t">Controller</span></button>
+      <button id="setBtn" class="ic"><span class="i">⚙️</span><span class="t">Settings</span></button>
+      <button id="fsBtn" class="ic"><span class="i">⛶</span><span class="t">Fullscreen</span></button>
+    </div>
     <p id="fsNote" class="sub"></p>
     <p id="soundNote" class="sub"></p>
-    <p id="padNote" class="sub">Controller: D-pad to pick a setting, left / right to change it, ✕ to go sailing</p>
-    <div class="btns">
-      <button id="goBtn">Go sailing</button>
-      <button id="restartBtn" class="ghost">Restart</button>
-      <button id="fsBtn" class="ghost">⛶ Fullscreen</button>
-      <button id="hsBtn" class="ghost">🏆 High scores</button>
-      <button id="htBtn" class="ghost">? How to play</button>
-      <button id="pcBtn" class="ghost">🎮 Controller</button>
+    <p id="padNote" class="sub">Controller: D-pad to move, ✕ to choose</p>
+    <!-- the tiles drive these; everything else still reads them -->
+    <div hidden>
+      <select id="selMode"></select><select id="selWind"></select>
+      <div id="fCourse"><select id="selCourse"></select></div>
     </div>
+  </div>
+  <div id="settingsCard" class="hidden">
+    <div id="brand2"><span class="logo">⚙️</span><h1>Settings</h1></div>
+    <div id="fields">
+      <div class="field"><label>🌀 Wind shifts</label>
+        <div class="sel-wrap"><select id="selShift"></select></div></div>
+      <div class="field"><label>🧑‍✈️ Steering</label>
+        <div class="sel-wrap"><select id="selTiller"></select></div></div>
+      <div class="field"><label>🤝 Crew assist</label>
+        <div class="sel-wrap"><select id="selAssist"></select></div></div>
+      <div class="field"><label>🔊 Sound</label>
+        <div class="sel-wrap"><select id="selSound"></select></div></div>
+      <div class="field" id="fLay"><label>📐 Laylines</label>
+        <div class="sel-wrap"><select id="selLay"></select></div></div>
+    </div>
+    <p class="sub" id="setHint">Crew assist trims and hikes for you, but assisted runs don't go on the high scores.</p>
+    <div class="gorow"><button id="setDone" class="go">✓ Done</button></div>
   </div>
 </div>
 
@@ -1866,11 +1908,40 @@ function buildSetup(){
              : 'Sail the course on your own, at your own pace.';
 
   document.getElementById('tillerCap').textContent = tillerInvert ? 'TILLER · PUSH AWAY' : 'STEER';
+  renderTiles();
   const wsel=WINDS[windPick];
   document.getElementById('windNote').textContent =
     `${wsel.note} Top speed today about ${topSpeedFor(wsel.kn).toFixed(1)} kn.`;
   if(typeof updateFsButton==='function') updateFsButton();
 }
+
+/* the start screen is tiles and chips; they set the hidden selects, which
+   everything else still reads, so nothing downstream had to change */
+const MODE_TILES=[
+  {v:'coins',  i:'🪙', n:'Coin run',   s:'90 s · grab coins'},
+  {v:'surv',   i:'👾', n:'Gunk swarm', s:'survive the ooze'},
+  {v:'race',   i:'⏱️', n:'Time trial', s:'gun · marks · clock'},
+  {v:'practice',i:'🧭',n:'Practice',   s:'sail the course'}];
+const WIND_ICONS=['🍃','🌬️','💨','🌊','⛈️'];
+function pickSel(id,v){ const el=document.getElementById(id); el.value=String(v); el.dispatchEvent(new Event('change')); }
+function renderTiles(){
+  let keep=null; try{ keep = padFocusEl && padFocusEl.dataset ? padFocusEl.dataset.key : null; }catch(e){}   // padFocusEl isn't initialised on the first load-time call
+  document.getElementById('modeTiles').innerHTML = MODE_TILES.map(t=>
+    `<button class="tile${gameMode===t.v?' on':''}" data-key="m-${t.v}" data-mode="${t.v}"><span class="i">${t.i}</span>${t.n}<span class="s">${t.s}</span></button>`).join('');
+  document.getElementById('windChips').innerHTML = WINDS.map((w,i)=>
+    `<button class="chip${windPick===i?' on':''}" data-key="w-${i}" data-wind="${i}">${WIND_ICONS[i]} ${w.name} <span class="k">${w.kn} kn</span></button>`).join('');
+  document.getElementById('courseChips').innerHTML = COURSES.map((c,i)=>
+    `<button class="chip${coursePick===i?' on':''}" data-key="c-${i}" data-course="${i}">${c.name}</button>`).join('');
+  document.getElementById('courseBlock').style.display = (coinMode||survMode)?'none':'';
+  document.querySelectorAll('#modeTiles .tile').forEach(b=>b.onclick=()=>pickSel('selMode',b.dataset.mode));
+  document.querySelectorAll('#windChips .chip').forEach(b=>b.onclick=()=>pickSel('selWind',b.dataset.wind));
+  document.querySelectorAll('#courseChips .chip').forEach(b=>b.onclick=()=>pickSel('selCourse',b.dataset.course));
+  if(keep){ const el=document.querySelector(`#setup [data-key="${keep}"]`); if(el) try{ setPadFocus(el); }catch(e){} }
+}
+function openSettings(){ document.getElementById('setupCard').classList.add('hidden'); document.getElementById('settingsCard').classList.remove('hidden'); setPadFocus(null); }
+function closeSettings(){ document.getElementById('settingsCard').classList.add('hidden'); document.getElementById('setupCard').classList.remove('hidden'); setPadFocus(null); buildSetup(); }
+document.getElementById('setBtn').addEventListener('click',openSettings);
+document.getElementById('setDone').addEventListener('click',closeSettings);
 
 // the dropdowns only need wiring up once
 function wireSetup(){
@@ -1886,7 +1957,7 @@ function wireSetup(){
     try{ localStorage.setItem('opti-assist',v); }catch(e){} });
 }
 
-function openSetup(){ paused=true; buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
+function openSetup(){ paused=true; document.getElementById('settingsCard').classList.add('hidden'); document.getElementById('setupCard').classList.remove('hidden'); buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
 function closeSetup(){ if(typeof setPadFocus==='function') setPadFocus(null); if(typeof SFX!=='undefined'){ SFX.unlock(); SFX.tick(); } applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
 /* ---------------- touch (iPhone / iPad) ----------------
@@ -1979,9 +2050,10 @@ function toggleFullscreen(){
 function updateFsButton(){
   const b=document.getElementById('fsBtn'), n=document.getElementById('fsNote');
   b.style.display='';                       // always show it, whatever the platform
-  if(isStandalone){ b.textContent='⛶ Already fullscreen'; n.textContent=''; }
-  else if(!fsSupported) b.textContent='⛶ Fullscreen on iPhone';
-  else { b.textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen'; n.textContent=''; }
+  const t=b.querySelector('.t')||b;
+  if(isStandalone){ t.textContent='Fullscreen ✓'; n.textContent=''; }
+  else if(!fsSupported) t.textContent='Fullscreen';
+  else { t.textContent = fsOn() ? 'Exit full' : 'Fullscreen'; n.textContent=''; }
 }
 /* ---------------- Xbox ----------------
    Edge on Xbox says so in its user agent. There the controller is the only
@@ -2104,6 +2176,9 @@ function setupNav(e){
   const el=items[i];
   if(e.down) setPadFocus(items[(i+1)%items.length]);
   if(e.up)   setPadFocus(items[(i-1+items.length)%items.length]);
+  if((e.left||e.right) && el.tagName!=='SELECT'){
+    setPadFocus(items[(i+(e.right?1:items.length-1))%items.length]); return;
+  }
   if((e.left||e.right) && el.tagName==='SELECT'){
     const n=el.options.length, j=clamp(el.selectedIndex+(e.right?1:-1),0,n-1);
     if(j!==el.selectedIndex){
@@ -2113,6 +2188,7 @@ function setupNav(e){
     }
   }
   if(e.ok){ if(el.tagName==='BUTTON') el.click(); else closeSetup(); }
+  if(e.back && !document.getElementById('settingsCard').classList.contains('hidden')) closeSettings();
 }
 function activePad(){ const l=navigator.getGamepads?navigator.getGamepads():[];
   for(const g of l) if(g&&g.connected) return g; return null; }
@@ -2141,6 +2217,7 @@ function pollPad(){
   if(padcardOpen){ if(e.ok||e.back||e.menu||e.start) closePadcard(); return; }
   if(boardOpen){ boardPad(e); return; }
   if(paused){
+    if(e.back && !document.getElementById('settingsCard').classList.contains('hidden')){ closeSettings(); return; }
     if(e.menu||e.start||e.back){ closeSetup(); return; }
     if(padInUse) setupNav(e);
     return;
