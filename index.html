@@ -1253,6 +1253,45 @@ function hurtHull(src,why){
   rumble(0.9,0.6,260); SFX.splash(); if(!why) cheer('Ouch!','#e04a45',true);
   if(SURV.hp<=0) survOver();
 }
+/* TIDAL WAVE: a clean tack sends a big wave rolling out from the boat. Its
+   front hits each gunk once as it passes, shoves it outward and pops gloop. */
+const WAVE_R=18, WAVE_SEC=1.1;
+function survWave(){
+  const S=SURV; S.waves=S.waves||[];
+  S.waves.push({x:boat.x, y:boat.y, t:0, hit:new Set()});
+  cheer('🌊 TIDAL WAVE!','#8fd9e8',true); SFX.surf(); SFX.gun(); rumble(1,0.7,500);
+}
+function stepWaves(dt){
+  const S=SURV, P=TUNING.pxPerM; if(!S.waves) return;
+  const dmg = 6 + 2*survLvl('boom');
+  for(const w of S.waves){
+    w.t+=dt; const front=WAVE_R*P*Math.min(1,w.t/WAVE_SEC);
+    for(const g of S.gunk){ if(g.dead || w.hit.has(g)) continue;
+      const d=Math.hypot(g.x-w.x,g.y-w.y);
+      if(d<front+g.r*P){ w.hit.add(g); hitGunk(g,dmg);
+        const u=vecOf(angOf(g.x-w.x,g.y-w.y)); g.x+=u.x*4*P; g.y+=u.y*4*P; } }
+    for(const o of S.spit) if(Math.hypot(o.x-w.x,o.y-w.y)<front) o.done=true;
+  }
+  S.waves=S.waves.filter(w=>w.t<WAVE_SEC+0.3);
+}
+function drawWaves(cam){
+  const S=SURV, P=TUNING.pxPerM; if(!S.waves) return;
+  for(const w of S.waves){
+    const u=Math.min(1,w.t/WAVE_SEC), R=WAVE_R*P*u, a=w.t<WAVE_SEC?1:1-(w.t-WAVE_SEC)/0.3;
+    const x=w.x-cam.x, y=w.y-cam.y;
+    ctx.save(); ctx.globalAlpha=Math.max(0,a);
+    // the swell: a dark trough inside a bright, foaming crest
+    ctx.strokeStyle='rgba(8,50,66,.35)'; ctx.lineWidth=14; ctx.beginPath(); ctx.arc(x,y,Math.max(1,R-12),0,7); ctx.stroke();
+    ctx.strokeStyle='rgba(143,217,232,.9)'; ctx.lineWidth=10; ctx.beginPath(); ctx.arc(x,y,R,0,7); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.95)'; ctx.lineWidth=4; ctx.setLineDash([14,9]); ctx.lineDashOffset=-w.t*80;
+    ctx.beginPath(); ctx.arc(x,y,R+5,0,7); ctx.stroke(); ctx.setLineDash([]);
+    // spray flung off the crest
+    ctx.fillStyle='rgba(255,255,255,.85)';
+    for(let i=0;i<28;i++){ const ang=i/28*Math.PI*2+w.x, rr=R+8+Math.sin(i*7.3+w.t*9)*6;
+      ctx.beginPath(); ctx.arc(x+Math.cos(ang)*rr, y+Math.sin(ang)*rr, 2.5, 0, 7); ctx.fill(); }
+    ctx.restore();
+  }
+}
 function killGunk(g){
   g.dead=true; SURV.cleared++;
   const n = g.xp>=10 ? 5 : g.xp>=3 ? 2 : 1;
@@ -1429,6 +1468,7 @@ function stepSurv(dt){
   S.gems=S.gems.filter(s=>!s.got && s.t<40);
   S.gunk=S.gunk.filter(g=>!g.dead && Math.hypot(g.x-boat.x,g.y-boat.y)<Math.hypot(W,H)/P*2*P);
   S.rings=S.rings.filter(r=>(r.t+=dt)<0.5);
+  stepWaves(dt);
 
   if(S.xp>=S.need) openLevelUp();
 }
@@ -1575,6 +1615,7 @@ function drawSurv(cam){
 }
 function drawSurvOverlay(cam){
   const S=SURV;
+  drawWaves(cam);
   if(S.invuln>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, R=4*TUNING.pxPerM, f=S.invuln/SURV_INVULN;
     ctx.fillStyle=`rgba(223,244,248,${0.10+0.08*Math.sin(simTime*9)})`; ctx.beginPath(); ctx.arc(bx,by,R,0,7); ctx.fill();
     ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*f})`; ctx.lineWidth=3; ctx.setLineDash([10,6]); ctx.lineDashOffset=-simTime*30;
@@ -1655,9 +1696,16 @@ function trackHabits(dt, twaDeg, side){
     if(h.t-h.headedAt<2.5 && h.t-(h.lastShiftTack||-99)>20){ h.shiftTacks++; h.lastShiftTack=h.t; bonusCoins(2,'Tacked on the shift!'); h.headedAt=-99; }
   }
   h.prevSide=side;
-  if(!h.tackJudged && h.tackAt>0 && h.t-h.tackAt>4){
-    h.tackJudged=true;
-    if(boat.spd>=0.7*h.tackFrom && Math.abs(twaDeg)>35){ h.clean++; bonusCoins(1,'Clean tack!'); }
+  // a clean tack: settled on the new side and back up to speed. Judged the moment
+  // it happens (from 1.2 s after the tack), given up on after 4 s.
+  if(!h.tackJudged && h.tackAt>0 && h.t-h.tackAt>1.2){
+    if(boat.spd>=0.75*h.tackFrom && Math.abs(twaDeg)>35 && flowing && !boat.capsized){
+      h.tackJudged=true; h.clean++;
+      if(survMode && SURV && !SURV.over){
+        // one wave per 5 s, so tacking on the spot can't spam them
+        if(h.t-(h.lastWave??-99)>5){ h.lastWave=h.t; survWave(); } else cheer('Clean tack!','#3fb877',true); }
+      else bonusCoins(1,'Clean tack!');
+    } else if(h.t-h.tackAt>4) h.tackJudged=true;
   }
 
   // catching a wave: a cheer when a surf really takes, not for every ripple
