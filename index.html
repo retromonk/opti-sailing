@@ -342,7 +342,7 @@
   #padcard{position:fixed;inset:0;z-index:62;display:flex;align-items:center;justify-content:center;
     padding:14px;background:rgba(10,42,54,.92);backdrop-filter:blur(9px)}
   #padcard.hidden{display:none}
-  #statsCard{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,42,54,.97)}
+  #statsCard{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--seadeep)}
   #statsCard.hidden{display:none}
   #statsCard .box{max-width:420px;width:100%;max-height:100%;overflow:auto;text-align:center;color:#fff;font-family:Fredoka,sans-serif}
   #statsCard h1{font-size:22px;margin:0 0 10px}
@@ -4117,12 +4117,14 @@ function ghostPanelsNear(bx,by){
 /* ============================================================ */
 let last=performance.now(), acc=0, d=lastD, sailedFor=0, zoomNow=1, rotateTick=0;
 const FIXED=1/60;
+const statsEl=document.getElementById('statsCard');
 function frame(now){
   pollPad();
   const dts=Math.min((now-last)/1000,0.25); last=now;
   // every screen is landscape on a phone: upright shows the prompt over whatever is up,
   // and a run in progress holds (clock included) until she is turned back
-  const upright = isTouch && portraitMQ.matches;
+  // the stats card reads fine upright, so it never asks you to turn the phone
+  const upright = isTouch && portraitMQ.matches && statsEl.classList.contains('hidden');
   document.body.classList.toggle('hold',upright);
   if(upright && rotateTick++%30===0) document.getElementById('rotateNote').textContent =
     (!paused && !boardOpen && !howtoOpen && !padcardOpen) ? 'The clock is waiting for you' : 'The game is played in landscape';
