@@ -1668,13 +1668,22 @@ function trackHabits(dt, twaDeg, side){
   if(Math.abs(twaDeg)>120 && boat.board<0.5 && !h.boardCheered){ h.boardCheered=true; cheer('Board up ✓'); SFX.tick(); }
   if(Math.abs(twaDeg)<90) h.boardCheered=false;
 
-  // streak: flat and flowing with way on
-  if(flowing && flat && boat.spd>1 && !boat.capsized){
-    h.streak+=dt; h.offT=0;
+  // streak: flat and flowing with way on, but only while keeping her flat takes work.
+  // In light air or running downwind she sits flat on her own, so that earns nothing.
+  const hikeUseful = (boat.hikeNeed||0) > 10;
+  if(flowing && flat && hikeUseful && boat.spd>1 && !boat.capsized){
+    h.streak+=dt; h.offT=0; h.idleT=0;
     const m = h.streak>=16 ? 2 : h.streak>=8 ? 1.5 : 1;
-    if(m>h.mult){ h.mult=m; cheer('Flat & fast ×'+m,'#ffd66b',true); SFX.streak(m); rumble(0.2,0.4,150); }
+    if(m>h.mult){ h.mult=m;
+      h.cheerAt=h.cheerAt||{};                       // each level is cheered at most every 20 s
+      if(h.t-(h.cheerAt[m]||-99)>20){ h.cheerAt[m]=h.t; cheer('Hiked flat ×'+m,'#ffd66b',true); SFX.streak(m); rumble(0.2,0.4,150); } }
+  } else if(!hikeUseful && !boat.capsized && Math.abs(boat.heel)*R2D<=18){
+    // nothing to hike against: the streak holds still, and quietly lapses after a few seconds
+    h.offT=0; h.idleT=(h.idleT||0)+dt;
+    if(h.idleT>3){ h.streak=0; h.mult=1; }
   } else {
     h.offT+=dt;
+    h.idleT=0;
     if(h.offT>1.2 || boat.capsized || Math.abs(boat.heel)*R2D>18){
       if(h.mult>1) cheer('streak over','rgba(255,255,255,.6)');
       h.streak=0; h.mult=1;
@@ -2703,6 +2712,8 @@ function step(dt){
   const press = clamp(awSpd/9, 0, 2.1);
   const heelForce = power*press*Math.sin(Math.abs(awa))*TUNING.heelGainDeg;
   const righting  = boat.crew*TUNING.hikeGainDeg;
+  // how far she would heel with you sat in: past 10° and hiking is doing real work
+  boat.hikeNeed = heelForce - 0.35*TUNING.hikeGainDeg;
   let targetHeel = clamp((heelForce - righting), -55, 70)*D2R * -side;
   // by the lee she starts rolling to windward instead — the classic death roll
   if(Math.abs(twa)*R2D>160)
