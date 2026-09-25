@@ -1010,8 +1010,8 @@ let tillerInvert=true;       // the real push-away tiller by default; direct ste
    she heels, so a new sailor can learn steering, tacking and the course
    first. Any manual sheet or hike input overrides it for that moment. */
 let assist=false;
-let soundOn=true;
-try{ if(localStorage.getItem('opti-sound')==='0') soundOn=false; }catch(e){}
+let soundOn=true, chipSound=false;       // chipSound: the "better sounds" 8-bit set
+try{ const v=localStorage.getItem('opti-sound'); if(v==='0') soundOn=false; if(v==='8') chipSound=true; }catch(e){}
 try{ if(localStorage.getItem('opti-assist')==='1') assist=true; if(localStorage.getItem('opti-tiller')==='0') tillerInvert=false; }catch(e){}
 document.body.classList.toggle('assist',assist);
 let course=[], wp=0;
@@ -1692,13 +1692,40 @@ function drawCheers(cam){
 const SFX=(()=>{
   let ac=null, flutter=null, flutterGain=null, lastCoin=0, rushSrc=null, rushFilt=null, rushGain=null;
   const ctxOk=()=>{ if(!soundOn) return null; if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; };
+  /* Chiptune mode runs everything through a 4-bit crusher, and swaps smooth
+     sounds for what an old console could make: square and triangle waves
+     whose pitch and volume move in 60 Hz steps, and sample-and-hold noise. */
+  let crush=null;
+  const out=a=>{ if(!chipSound) return a.destination;
+    if(!crush){ const pre=a.createGain(); pre.gain.value=3; const ws=a.createWaveShaper(), c=new Float32Array(1024);
+      for(let i=0;i<1024;i++){ const x=i/511.5-1; c[i]=Math.round(x*7)/7; } ws.curve=c;
+      const post=a.createGain(); post.gain.value=1/3; pre.connect(ws).connect(post).connect(a.destination); crush=pre; }
+    return crush; };
+  const STEP=1/60;
+  const chipTone=(f,dur,vol,slide,type)=>{ const a=ctxOk(); if(!a) return;
+    const o=a.createOscillator(), g=a.createGain(), t0=a.currentTime; o.type=type||'square';
+    const steps=Math.max(1,Math.round(dur/STEP));
+    for(let k=0;k<=steps;k++){ const u=k/steps;
+      o.frequency.setValueAtTime(Math.max(40,f+slide*u),t0+k*STEP);
+      g.gain.setValueAtTime(vol*Math.max(0,1-u*u),t0+k*STEP); }   // volume falls in steps, like a length counter
+    o.connect(g).connect(out(a)); o.start(t0); o.stop(t0+dur+STEP); };
   const tone=(f,dur,type='sine',vol=0.18,slide=0)=>{ const a=ctxOk(); if(!a) return;
+    if(chipSound) return chipTone(f,dur,vol*0.7,slide,type==='sine'?'triangle':'square');
     const o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,a.currentTime);
     if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,f+slide),a.currentTime+dur);
     g.gain.setValueAtTime(vol,a.currentTime); g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+dur);
     o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime+dur); };
+  // a quick run of notes, one per step: the classic 8-bit arpeggio
+  const arp=(notes,noteDur,vol,type)=>notes.forEach((f,i)=>setTimeout(()=>chipTone(f,noteDur,vol,0,type),i*noteDur*1000));
+  // sample-and-hold noise: hold each random value for a few samples, the lower the rougher
+  const nesNoise=(a,n,hold,shape)=>{ const b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0); let v=0;
+    for(let i=0;i<n;i++){ if(i%hold===0) v=Math.random()<0.5?-1:1; d[i]=v*shape(i/n); } return b; };
   const noise=(dur,vol,lp)=>{ const a=ctxOk(); if(!a) return;
-    const n=a.sampleRate*dur, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+    const n=a.sampleRate*dur;
+    if(chipSound){ const hold=Math.max(2,Math.round(a.sampleRate/(lp*2)));
+      const src=a.createBufferSource(); src.buffer=nesNoise(a,n,hold,u=>Math.floor((1-u)*8)/8);
+      const g=a.createGain(); g.gain.value=vol*0.5; src.connect(g).connect(out(a)); src.start(); return; }
+    const b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
     for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
     const src=a.createBufferSource(); src.buffer=b; const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
     const g=a.createGain(); g.gain.value=vol; src.connect(f).connect(g).connect(a.destination); src.start(); };
@@ -1718,38 +1745,50 @@ const SFX=(()=>{
       silent.play().catch(()=>{});
     },
     ready(){ return !!ac && ac.state==='running'; },
-    coin(mult){ const a=ctxOk(); if(!a) return; const n=Math.min(6,Math.floor((a.currentTime-lastCoin<1.5?1:0)*0)); lastCoin=a.currentTime;
+    coin(mult){ const a=ctxOk(); if(!a) return; lastCoin=a.currentTime;
+      if(chipSound){ const b=mult>=2?1319:mult>=1.5?1175:988; chipTone(b,0.07,0.11,0); setTimeout(()=>chipTone(b*4/3,0.3,0.11,0),70); return; }
       const base=mult>=2?880:mult>=1.5?740:660; tone(base,0.12,'triangle',0.16); setTimeout(()=>tone(base*1.5,0.16,'triangle',0.14),70); },
-    cheer(){ tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
-    streak(m){ tone(m>=2?988:784,0.25,'sine',0.14,200); },
+    cheer(){ if(chipSound) return arp([523,659,784,1047,784,1047,1319],0.05,0.1);
+      tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
+    streak(m){ if(chipSound) return arp(m>=2?[784,988,1175,1568]:[659,784,988,1319],0.045,0.1);
+      tone(m>=2?988:784,0.25,'sine',0.14,200); },
+    // played when you pick the chiptune set, so you know it worked
+    powerUp(){ arp([262,330,392,523,330,392,523,659,392,523,659,1047],0.04,0.1); },
     tick(){ tone(420,0.08,'square',0.06); },
-    splash(){ noise(0.7,0.35,900); tone(120,0.5,'sine',0.2,-60); },
+    splash(){ if(chipSound){ noise(0.5,0.35,600); arp([523,494,466,440,415,392,370,349,330,311,294,262],0.06,0.12); return; }
+      noise(0.7,0.35,900); tone(120,0.5,'sine',0.2,-60); },
     gun(){ noise(0.25,0.5,600); tone(90,0.3,'sine',0.25,-40); },
     gybe(){ noise(0.18,0.25,1200); },
     surf(){ noise(0.6,0.22,700); },
     // last-ten-seconds pips: short and clean, higher for the final three
-    pew(){ tone(760,0.05,'triangle',0.05,-260); },
+    pew(){ if(chipSound) return chipTone(1400,0.09,0.05,-1100,'square'); tone(760,0.05,'triangle',0.05,-260); },
     pip(n){ tone(n<=3?1175:880, 0.09, 'sine', n<=3?0.2:0.14); },
-    horn(){ tone(440,0.55,'square',0.09); tone(554,0.55,'square',0.06); },
+    horn(){ if(chipSound) return arp([440,554,659,880,440,554,659,880],0.06,0.09);
+      tone(440,0.55,'square',0.09); tone(554,0.55,'square',0.06); },
     // the sail flapping: a soft rustle that fades in while she luffs
     flutter(on){ const a=ctxOk(); if(!a) return;
-      if(!flutter){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
-        for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(0.4+0.6*Math.abs(Math.sin(i/a.sampleRate*Math.PI*14)));
+      if(!flutter){ const n=a.sampleRate*1, sr=a.sampleRate;
+        const b = chipSound ? nesNoise(a,n,12,u=>Math.floor(Math.abs(Math.sin(u*Math.PI*14))*4)/4)
+                            : a.createBuffer(1,n,sr);
+        if(!chipSound){ const d=b.getChannelData(0); for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(0.4+0.6*Math.abs(Math.sin(i/sr*Math.PI*14))); }
         flutter=a.createBufferSource(); flutter.buffer=b; flutter.loop=true;
-        const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=900; f.Q.value=1.1;
+        const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=900; f.Q.value=chipSound?0.5:1.1;
         flutterGain=a.createGain(); flutterGain.gain.value=0; flutter.connect(f).connect(flutterGain).connect(a.destination); flutter.start(); }
       const target=on?0.045:0; flutterGain.gain.setTargetAtTime(target,a.currentTime,on?0.5:0.3); },
     // water along the hull: a hiss that rises with speed, louder while surfing
     rush(spd,surf){ const a=ctxOk(); if(!a) return;
-      if(!rushSrc){ const n=a.sampleRate*1, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
-        for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+      if(!rushSrc){ const n=a.sampleRate*1;
+        const b = chipSound ? nesNoise(a,n,40,()=>1) : a.createBuffer(1,n,a.sampleRate);
+        if(!chipSound){ const d=b.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1; }
         rushSrc=a.createBufferSource(); rushSrc.buffer=b; rushSrc.loop=true;
         rushFilt=a.createBiquadFilter(); rushFilt.type='lowpass'; rushFilt.Q.value=0.5;
         rushGain=a.createGain(); rushGain.gain.value=0; rushSrc.connect(rushFilt).connect(rushGain).connect(a.destination); rushSrc.start(); }
       const lvl=clamp((spd-0.6)/3.5,0,1);
       rushGain.gain.setTargetAtTime(lvl*0.08*(surf>1.08?1.7:1), a.currentTime, 0.2);
       rushFilt.frequency.setTargetAtTime(300+spd*260, a.currentTime, 0.2); },
-    mute(){ if(flutterGain) flutterGain.gain.value=0; if(rushGain) rushGain.gain.value=0; }
+    mute(){ if(flutterGain) flutterGain.gain.value=0; if(rushGain) rushGain.gain.value=0; },
+    // drop the looping sounds so they come back in the new style
+    restyle(){ try{ if(flutter) flutter.stop(); if(rushSrc) rushSrc.stop(); }catch(e){} flutter=flutterGain=rushSrc=rushFilt=rushGain=null; }
   };
 })();
 // browsers only let audio start after a gesture — listen for the ones iOS honours too
@@ -1904,10 +1943,10 @@ function buildSetup(){
     '<option value="0">Off: you do it all</option>'+
     '<option value="1">On: crew trims &amp; hikes (no high scores)</option>';
   SEL.assist.value = assist?'1':'0';
-  SEL.sound.innerHTML = '<option value="1">On</option><option value="0">Off</option>';
+  SEL.sound.innerHTML = '<option value="1">On</option><option value="8">🕹️ Better (chiptune)</option><option value="0">Off</option>';
   document.getElementById('soundNote').textContent = (soundOn && typeof SFX!=='undefined' && !SFX.ready())
     ? 'Sound starts after your first tap or key press. On an iPhone, check the ringer switch is not on silent.' : '';
-  SEL.sound.value = soundOn?'1':'0';
+  SEL.sound.value = !soundOn?'0':chipSound?'8':'1';
   SEL.lay.innerHTML = '<option value="1">Shown when beating</option><option value="0">Hidden</option>';
   SEL.lay.value = showLaylines?'1':'0';
   document.getElementById('fLay').style.display = (coinMode||survMode)?'none':'';
@@ -1969,7 +2008,10 @@ function wireSetup(){
   on(document.getElementById('selShift'),  v=>{ shiftPick=+v; });
   on(document.getElementById('selCourse'), v=>{ coursePick=+v; });
   on(document.getElementById('selTiller'), v=>{ tillerInvert = v==='1'; try{ localStorage.setItem('opti-tiller',v); }catch(e){} });
-  on(document.getElementById('selSound'),  v=>{ soundOn = v==='1'; try{ localStorage.setItem('opti-sound',v); }catch(e){} });
+  on(document.getElementById('selSound'),  v=>{ soundOn = v!=='0'; const was=chipSound; chipSound = v==='8';
+    try{ localStorage.setItem('opti-sound',v); }catch(e){}
+    if(was!==chipSound) SFX.restyle();
+    if(soundOn){ SFX.unlock(); if(chipSound) SFX.powerUp(); else SFX.cheer(); } });
   on(document.getElementById('selLay'),    v=>{ showLaylines = v==='1'; });
   on(document.getElementById('selAssist'), v=>{ assist = v==='1'; document.body.classList.toggle('assist',assist);
     try{ localStorage.setItem('opti-assist',v); }catch(e){} });
