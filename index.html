@@ -3075,14 +3075,16 @@ function drawCoins(cam){
    trial, which stays a straight test of sailing.
    ============================================================ */
 var FISH_BOOST_SEC=4.5, FISH_BOOST=0.35, FISH_CATCH_M=7;   // var: resetRun() runs before this point on load
-var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0;
+var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0, fishPink=false;
 // rare: the first school turns up after 25–45 s, then one every 35–65 s, one at a time
 function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=25+Math.random()*20; fishCaught=0; }
 function fishOn(){ return !raceMode; }
 function fishMul(){ return fishT>0 ? 1+FISH_BOOST*clamp(fishT/1.5,0,1) : 1; }   // fades over the last 1.5 s
 function spawnSchool(){
   const P=TUNING.pxPerM, a=boat.hdg+(Math.random()*2-1)*1.0, d=(20+Math.random()*14)*P, v=vecOf(a);
-  SCHOOLS.push({x:boat.x+v.x*d, y:boat.y+v.y*d, t:0, used:false, hopT:0.3, ph:Math.random()*7});
+  // in the swarm, a hurt boat sometimes meets a rare pink school: its fish mends a heart
+  const pink = survMode && SURV && SURV.hp<SURV.maxHp && Math.random()<0.25;
+  SCHOOLS.push({x:boat.x+v.x*d, y:boat.y+v.y*d, t:0, used:false, hopT:0.3, ph:Math.random()*7, pink});
 }
 function sayFintastic(){
   cheer('FINNNN-TASTIC! 🐟','#7fe3ff',true);
@@ -3110,11 +3112,11 @@ function stepFish(dt){
     sc.hopT-=dt;
     if(sc.hopT<=0 && !sc.used){ sc.hopT=0.5+Math.random()*0.8;
       const a=Math.random()*7, r=(1+Math.random()*2)*P, v=vecOf(a);
-      LEAPS.push({x0:sc.x+v.x*r, y0:sc.y+v.y*r, x1:sc.x+v.x*r*2.6, y1:sc.y+v.y*r*2.6, t:0, dur:0.55, h:34, catch:false}); }
+      LEAPS.push({x0:sc.x+v.x*r, y0:sc.y+v.y*r, x1:sc.x+v.x*r*2.6, y1:sc.y+v.y*r*2.6, t:0, dur:0.55, h:34, catch:false, pink:sc.pink}); }
     // close enough: one fish goes for the boat, aimed where she will be when it lands
     if(!sc.used && d<FISH_CATCH_M && !boat.capsized){
       sc.used=true; const T=0.7, sp=boat.spd*KP;
-      LEAPS.push({x0:sc.x, y0:sc.y, x1:boat.x+bv.x*sp*T, y1:boat.y+bv.y*sp*T, t:0, dur:T, h:70, catch:true});
+      LEAPS.push({x0:sc.x, y0:sc.y, x1:boat.x+bv.x*sp*T, y1:boat.y+bv.y*sp*T, t:0, dur:T, h:70, catch:true, pink:sc.pink});
     }
   }
   for(const l of LEAPS){
@@ -3122,7 +3124,9 @@ function stepFish(dt){
     if(l.catch && !l.done && l.t>=l.dur){
       l.done=true;
       if(!boat.capsized){   // it homes in as it falls (see drawFish), so only a capsize loses it
-        fishT=FISH_BOOST_SEC; fishCaught++; boat.spd+=0.6; sayFintastic(); rumble(0.5,0.7,200);
+        fishT=FISH_BOOST_SEC; fishCaught++; boat.spd+=0.6; fishPink=!!l.pink; rumble(0.5,0.7,200);
+        if(l.pink && survMode && SURV && SURV.hp<SURV.maxHp){ SURV.hp++; cheer('❤ +1','#ff8fc0',true); SFX.cheer(); }
+        sayFintastic();
       } else { SFX.gybe(); cheer('So close!','#bfe9ff'); }
     }
   }
@@ -3130,12 +3134,14 @@ function stepFish(dt){
   for(const sc of SCHOOLS) if(sc.used) sc.fade=(sc.fade||0)+dt;          // a used school scatters
   SCHOOLS=SCHOOLS.filter(sc=> sc.used ? sc.fade<1.2 : sc.t<45 && Math.hypot(sc.x-boat.x,sc.y-boat.y)<120*P);
 }
-function drawFishShape(len,wig){
-  ctx.fillStyle='#5f9bb3'; ctx.strokeStyle=C.ink; ctx.lineWidth=2;
+const FISH_BLUE=['#5f9bb3','#3f7d97','#e8f6fb'], FISH_PINK=['#ff8fc0','#e0609c','#ffe3f0'];
+function drawFishShape(len,wig,pink){
+  const col=pink?FISH_PINK:FISH_BLUE;
+  ctx.fillStyle=col[0]; ctx.strokeStyle=C.ink; ctx.lineWidth=2;
   ctx.beginPath(); ctx.ellipse(0,0,len*0.5,len*0.2,0,0,7); ctx.fill(); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(-len*0.45,0); ctx.lineTo(-len*0.78,-len*0.22+wig); ctx.lineTo(-len*0.78,len*0.22+wig); ctx.closePath();
-  ctx.fillStyle='#3f7d97'; ctx.fill(); ctx.stroke();
-  ctx.fillStyle='#e8f6fb'; ctx.beginPath(); ctx.ellipse(len*0.05,len*0.06,len*0.3,len*0.07,0,0,7); ctx.fill();
+  ctx.fillStyle=col[1]; ctx.fill(); ctx.stroke();
+  ctx.fillStyle=col[2]; ctx.beginPath(); ctx.ellipse(len*0.05,len*0.06,len*0.3,len*0.07,0,0,7); ctx.fill();
   ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(len*0.3,-len*0.04,len*0.05,0,7); ctx.fill();
 }
 function drawFish(cam){
@@ -3148,13 +3154,17 @@ function drawFish(cam){
     ctx.save(); ctx.translate(x,y); ctx.globalAlpha=a;
     // ripples
     for(let i=0;i<3;i++){ const u=((simTime*0.6+i/3)%1);
-      ctx.strokeStyle=`rgba(210,245,255,${0.45*(1-u)})`; ctx.lineWidth=2;
+      ctx.strokeStyle = sc.pink ? `rgba(255,150,200,${0.6*(1-u)})` : `rgba(210,245,255,${0.45*(1-u)})`; ctx.lineWidth=2;
       ctx.beginPath(); ctx.ellipse(0,0,(1+u*3.2)*P,(0.7+u*2.2)*P,0,0,7); ctx.stroke(); }
     // dark shapes milling about under the surface
-    ctx.fillStyle='rgba(10,40,55,.35)';
+    ctx.fillStyle = sc.pink ? 'rgba(200,60,130,.35)' : 'rgba(10,40,55,.35)';
     for(let i=0;i<6;i++){ const ang=simTime*1.4+i*1.05+sc.ph, r=(0.8+0.6*Math.sin(i*2.1))*P*1.6;
       ctx.save(); ctx.translate(Math.cos(ang)*r, Math.sin(ang)*r*0.7); ctx.rotate(ang+Math.PI/2);
       ctx.beginPath(); ctx.ellipse(0,0,0.5*P,0.17*P,0,0,7); ctx.fill(); ctx.restore(); }
+    if(sc.pink && !sc.used){   // a heart bobbing over it, so it is worth the detour
+      ctx.font='600 20px Fredoka,sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ff8fc0';
+      ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.8)';
+      const hy=-4.2*P+Math.sin(simTime*3)*4; ctx.strokeText('❤',0,hy); ctx.fillText('❤',0,hy); }
     ctx.restore();
   }
 }
@@ -3178,13 +3188,13 @@ function drawFishAir(cam){
     const dir=Math.atan2(ty-l.y0, tx-l.x0), tilt=(0.5-u)*1.4*(Math.cos(dir)>=0?-1:1);
     ctx.save(); ctx.translate(x,y-hgt); ctx.rotate(dir+tilt);
     if(Math.cos(dir)<0) ctx.scale(1,-1);
-    drawFishShape(l.catch?2.2*P:1.5*P, Math.sin(simTime*30)*3); ctx.restore();
+    drawFishShape(l.catch?2.2*P:1.5*P, Math.sin(simTime*30)*3, l.pink); ctx.restore();
   }
   // the one in the boat flops about while the boost lasts
   if(fishT>0 && !boat.capsized){
     const x=boat.x-cam.x, y=boat.y-cam.y, hop=Math.abs(Math.sin(simTime*9))*8;
     ctx.save(); ctx.translate(x+4,y-hop-6); ctx.rotate(Math.sin(simTime*13)*0.6);
-    drawFishShape(1.4*P, Math.sin(simTime*40)*3); ctx.restore();
+    drawFishShape(1.4*P, Math.sin(simTime*40)*3, fishPink); ctx.restore();
     const a=clamp(fishT/1.5,0,1); ctx.save(); ctx.globalAlpha=a; ctx.font='600 14px Fredoka,sans-serif'; ctx.textAlign='center';
     ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.85)'; ctx.strokeText('🐟 BOOST', x, y+52);
     ctx.fillStyle='#7fe3ff'; ctx.fillText('🐟 BOOST', x, y+52); ctx.restore();
