@@ -342,6 +342,15 @@
   #padcard{position:fixed;inset:0;z-index:62;display:flex;align-items:center;justify-content:center;
     padding:14px;background:rgba(10,42,54,.92);backdrop-filter:blur(9px)}
   #padcard.hidden{display:none}
+  #statsCard{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,42,54,.97)}
+  #statsCard.hidden{display:none}
+  #statsCard .box{max-width:420px;width:100%;max-height:100%;overflow:auto;text-align:center;color:#fff;font-family:Fredoka,sans-serif}
+  #statsCard h1{font-size:22px;margin:0 0 10px}
+  #statsCard .grid{display:grid;grid-template-columns:1fr auto;gap:4px 16px;text-align:left;font-size:15px;margin:0 auto 10px;max-width:320px}
+  #statsCard .grid b{font-family:"IBM Plex Mono",monospace;color:var(--sun);text-align:right}
+  #statsCard .grid .h{grid-column:1/3;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:8px}
+  #statsCard .sub{font-size:11.5px;color:rgba(255,255,255,.55)}
+  #statsCard button{font-family:Fredoka,sans-serif;font-weight:600;font-size:15px;color:var(--ink);background:var(--sun);border:3px solid var(--ink);border-radius:14px;padding:8px 22px;cursor:pointer}
   #pcCard{width:100%;max-width:820px;max-height:100%;overflow:auto;text-align:center;-webkit-overflow-scrolling:touch}
   #pcCard h1{font-size:22px;font-weight:600;margin:0 0 2px}
   #pcCard .sub{color:rgba(255,255,255,.6);font-size:13px;margin:0 0 8px}
@@ -666,6 +675,12 @@
 
 <div id="lvlup" class="hidden"></div>
 
+<div id="statsCard" class="hidden"><div class="box">
+  <h1>📊 Players</h1>
+  <div id="statsBody">Loading…</div>
+  <p class="sub">Anonymous: each device gets a random id, nothing else is kept.</p>
+  <button id="statsClose">Close</button>
+</div></div>
 <div id="hiscore" class="hidden">
   <div id="hsCard">
     <h1>HIGH SCORES</h1>
@@ -736,7 +751,8 @@ const cfg=window.FIREBASE_CONFIG;
 if(cfg && cfg.projectId && !/^PASTE/.test(cfg.projectId) && !/^PASTE/.test(cfg.apiKey)){
   try{
     const V='10.12.2';
-    const [{initializeApp},{getFirestore,collection,addDoc,getDocs,query,orderBy,limit,serverTimestamp}] =
+    const [{initializeApp},{getFirestore,collection,addDoc,getDocs,query,orderBy,limit,serverTimestamp,
+            doc,setDoc,updateDoc,where,getCountFromServer,Timestamp}] =
       await Promise.all([
         import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
         import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)]);
@@ -765,6 +781,26 @@ if(cfg && cfg.projectId && !/^PASTE/.test(cfg.projectId) && !/^PASTE/.test(cfg.a
         const ref=await addDoc(scol,{name:e.name,level:e.level,t:e.t,ts:serverTimestamp()});
         return ref.id;
       }
+    };
+    /* Player counts, anonymous: a random id kept on this device (no names, no
+       cookies, nothing about the person), one players/{id} doc per device and
+       one plays/ doc per run started. */
+    window.statsStore={
+      async hello(id,kind){ const ref=doc(db,'players',id);
+        try{ await updateDoc(ref,{last:serverTimestamp()}); }
+        catch(e){ await setDoc(ref,{first:serverTimestamp(),last:serverTimestamp(),kind}); } },
+      async play(id,mode){ await addDoc(collection(db,'plays'),{pid:id,mode,ts:serverTimestamp()}); },
+      async stats(){
+        const P=collection(db,'players'), G=collection(db,'plays'), n=q=>getCountFromServer(q).then(r=>r.data().count);
+        const since=d=>Timestamp.fromMillis(Date.now()-d*86400000);
+        const [dev,dev7,dev1,plays,plays7,plays1,...rest]=await Promise.all([
+          n(P), n(query(P,where('last','>=',since(7)))), n(query(P,where('last','>=',since(1)))),
+          n(G), n(query(G,where('ts','>=',since(7)))), n(query(G,where('ts','>=',since(1)))),
+          ...['coins','surv','race','practice'].map(m=>n(query(G,where('mode','==',m)))),
+          ...['phone','tablet','desktop','xbox'].map(k=>n(query(P,where('kind','==',k))))]);
+        return {dev,dev7,dev1,plays,plays7,plays1,
+          modes:{coins:rest[0],surv:rest[1],race:rest[2],practice:rest[3]},
+          kinds:{phone:rest[4],tablet:rest[5],desktop:rest[6],xbox:rest[7]}}; }
     };
   }catch(err){ window.scoreStoreError=err; console.warn('High scores: Firebase failed to load',err); }
 }
@@ -2394,7 +2430,7 @@ function wireSetup(){
 }
 
 function openSetup(){ paused=true; document.getElementById('settingsCard').classList.add('hidden'); document.getElementById('setupCard').classList.remove('hidden'); buildSetup(); if(typeof updateFsButton==='function') updateFsButton(); document.getElementById('setup').classList.remove('hidden'); }
-function closeSetup(){ if(typeof setPadFocus==='function') setPadFocus(null); if(typeof SFX!=='undefined'){ SFX.unlock(); SFX.tick(); } applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
+function closeSetup(){ if(typeof logPlay==='function') logPlay(); if(typeof setPadFocus==='function') setPadFocus(null); if(typeof SFX!=='undefined'){ SFX.unlock(); SFX.tick(); } applyWind(windPick); document.getElementById('setup').classList.add('hidden'); paused=false; }
 
 /* ---------------- touch (iPhone / iPad) ----------------
    Left thumb works the tiller. Right thumb works the sheet:
@@ -2496,6 +2532,40 @@ function updateFsButton(){
    input, so the pointer is hidden and the game goes fullscreen on the first
    button press (browsers only allow fullscreen from a press, not on load). */
 const isXbox = /Xbox/i.test(navigator.userAgent);
+
+/* ---------------- player counts (anonymous) ---------------- */
+var PLAYER_ID=(()=>{ try{ let id=localStorage.getItem('opti-pid');
+  if(!id){ const a=new Uint8Array(12); crypto.getRandomValues(a); id=[...a].map(b=>b.toString(36).padStart(2,'0')).join('').slice(0,20); localStorage.setItem('opti-pid',id); }
+  return id; }catch(e){ return null; } })();
+const deviceKind=()=> isXbox ? 'xbox' : isTouch ? (Math.min(screen.width,screen.height)<600 ? 'phone' : 'tablet') : 'desktop';
+document.addEventListener('scorestore-ready',()=>{
+  if(!PLAYER_ID || !window.statsStore) return;
+  const day=new Date().toISOString().slice(0,10);
+  try{ if(localStorage.getItem('opti-seen')===day) return; localStorage.setItem('opti-seen',day); }catch(e){}
+  window.statsStore.hello(PLAYER_ID,deviceKind()).catch(e=>console.warn('player count',e));
+});
+var lastPlayLog=-1e9;   // var: closeSetup can run before this line on load
+function logPlay(){
+  if(!PLAYER_ID || !window.statsStore || performance.now()-lastPlayLog<20000) return;   // one per run, not per menu hop
+  lastPlayLog=performance.now();
+  window.statsStore.play(PLAYER_ID,gameMode).catch(e=>console.warn('play count',e));
+}
+// the numbers: open the game with #stats on the end of the address
+async function openStats(){
+  const el=document.getElementById('statsCard'), body=document.getElementById('statsBody'); el.classList.remove('hidden');
+  if(!window.statsStore){ body.textContent='The scoreboard is offline, so there are no counts to show.'; return; }
+  body.textContent='Loading…';
+  try{ const s=await window.statsStore.stats(), row=(k,v)=>`<span>${k}</span><b>${v}</b>`;
+    body.innerHTML='<div class="grid">'+
+      '<span class="h">Devices</span>'+row('All time',s.dev)+row('Last 7 days',s.dev7)+row('Last 24 hours',s.dev1)+
+      '<span class="h">Games started</span>'+row('All time',s.plays)+row('Last 7 days',s.plays7)+row('Last 24 hours',s.plays1)+
+      '<span class="h">By mode</span>'+row('🪙 Coin run',s.modes.coins)+row('👾 Gunk swarm',s.modes.surv)+row('⏱️ Time trial',s.modes.race)+row('🧭 Practice',s.modes.practice)+
+      '<span class="h">By device</span>'+row('📱 Phone',s.kinds.phone)+row('📲 Tablet',s.kinds.tablet)+row('💻 Computer',s.kinds.desktop)+row('🎮 Xbox',s.kinds.xbox)+'</div>'; }
+  catch(e){ console.warn(e); body.textContent='Could not load the counts ('+(e.code||e.message||'error')+').'; }
+}
+document.getElementById('statsClose').addEventListener('click',()=>{ document.getElementById('statsCard').classList.add('hidden'); if(location.hash==='#stats') history.replaceState(null,'',location.pathname+location.search); });
+if(location.hash==='#stats') document.addEventListener('scorestore-ready',openStats);
+addEventListener('hashchange',()=>{ if(location.hash==='#stats') openStats(); });
 /* Edge on Xbox: the page cannot switch the pad out of mouse mode (only holding
    Menu does), and once it is in game-controls mode its presses no longer count
    as a gesture, so fullscreen has to happen first, from a real click. */
@@ -2830,7 +2900,7 @@ function closeScoreboard(){
   HS('hiscore').classList.add('hidden');
   setPadFocus(null);
   if(hsFromSetup){ openSetup(); }
-  else { resetRun(); paused=false; }
+  else { resetRun(); paused=false; logPlay(); }
 }
 async function hsSubmit(){
   if(!hsEntering||hsSaving) return;
