@@ -131,17 +131,19 @@
   #setup .tile .s{font-size:11.5px;color:rgba(255,255,255,.6);font-weight:400}
   #setup .tile.on{border-color:var(--sun);background:rgba(34,86,102,.95);transform:translateY(-3px)}
   #setup .tile.on .s{color:var(--sun)}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
   #setup .chip{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.85);border:2px solid rgba(255,255,255,.18);
-    border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500;box-shadow:none;display:flex;gap:6px;align-items:center}
+    border-radius:999px;padding:0 16px;min-height:44px;font-size:15px;font-weight:500;box-shadow:none;display:flex;gap:6px;align-items:center}
   #setup .chip .k{font-family:"IBM Plex Mono",monospace;font-size:11px;color:rgba(255,255,255,.55)}
   #setup .chip.on{background:var(--sun);color:var(--ink);border-color:var(--ink)} #setup .chip.on .k{color:rgba(16,51,63,.7)}
   .gorow{margin:14px 0 4px}
   #setup button.go{font-size:20px;padding:12px 38px;border-radius:999px}
   .icons{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
   #setup .ic{font-family:Fredoka,sans-serif;color:#fff;background:rgba(16,51,63,.7);border:2px solid rgba(255,255,255,.18);
-    border-radius:14px;padding:6px 10px;min-width:78px;box-shadow:none;display:flex;flex-direction:column;align-items:center;gap:1px;font-weight:500}
-  #setup .ic .i{font-size:20px;line-height:1.2} #setup .ic .t{font-size:11px;color:rgba(255,255,255,.75)}
+    border-radius:14px;padding:6px 10px;min-width:84px;min-height:58px;box-shadow:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-weight:500}
+  #setup .ic .i{font-size:22px;line-height:1.2} #setup .ic .t{font-size:11.5px;color:rgba(255,255,255,.75)}
+  #setup .tile,#setup .chip,#setup .ic,#setup button{touch-action:manipulation;cursor:pointer}
+  #setup .tile *,#setup .chip *,#setup .ic *{pointer-events:none}
   #setup .tile:active,#setup .chip:active,#setup .ic:active{transform:translateY(2px)}
   #setup .pad-focus{outline:3px solid var(--sun);outline-offset:3px}
   #settingsCard #fields{max-width:520px;margin:0 auto}
@@ -174,12 +176,22 @@
   #soundNote{margin:6px 0 0!important;font-size:11.5px!important;min-height:0}
 
   /* landscape phones are short, so tighten everything up */
+  @media (max-height:350px){
+    #setup #brand,#setup #windNote{display:none!important}
+    #setup .tile{min-height:48px!important;padding:3px 6px!important} #setup .tile .s{display:none} #setup .tile .i{font-size:20px!important}
+    #setup .chip{padding:0 10px!important;font-size:13px!important} #setup .rowlabel{margin:4px 0 3px}
+    #setup .actions{margin-top:6px}
+  }
   @media (max-height:460px){
     #brand{margin-bottom:4px} #brand .logo{font-size:24px} #brand h1,#brand2 h1{font-size:22px!important}
     #setup .tile{padding:6px 6px 5px;border-radius:14px;font-size:13px} #setup .tile .i{font-size:24px} #setup .tile .s{font-size:10px}
-    .tiles{gap:7px} .rowlabel{margin:6px 0 4px} #setup .chip{padding:4px 10px;font-size:12.5px}
-    .gorow{margin:8px 0 2px} #setup button.go{font-size:16px;padding:8px 26px}
-    .icons{margin-top:6px;gap:6px} #setup .ic{min-width:62px;padding:3px 6px} #setup .ic .i{font-size:16px} #setup .ic .t{font-size:9.5px}
+    #setup .tile{min-height:60px;justify-content:center}
+    .tiles{gap:8px} .rowlabel{margin:6px 0 4px} .chips{gap:8px} #setup .chip{padding:0 14px;min-height:44px;font-size:14px}
+    #modeNote,#soundNote,#padNote{display:none}
+    #windNote{margin:5px 0 0!important;font-size:11px!important}
+    .actions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .gorow{margin:0} #setup button.go{font-size:17px;padding:0 24px;min-height:52px}
+    .icons{margin:0;gap:6px;flex-wrap:nowrap} #setup .ic{min-width:56px;min-height:52px;padding:3px 6px} #setup .ic .i{font-size:18px} #setup .ic .t{font-size:9.5px}
     #setup{padding:10px}
     #setupCard h1{font-size:19px;margin-bottom:1px}
     #setupCard .sub{font-size:11.5px;margin-bottom:9px}
@@ -523,6 +535,7 @@
     <div id="windChips" class="chips"></div>
     <p id="windNote" class="sub"></p>
     <div id="courseBlock"><div class="rowlabel">Course</div><div id="courseChips" class="chips"></div></div>
+    <div class="actions">
     <div class="gorow"><button id="goBtn" class="go">⛵ Go sailing</button></div>
     <div class="icons">
       <button id="restartBtn" class="ic"><span class="i">↺</span><span class="t">Restart</span></button>
@@ -531,6 +544,7 @@
       <button id="pcBtn" class="ic"><span class="i">🎮</span><span class="t">Controller</span></button>
       <button id="setBtn" class="ic"><span class="i">⚙️</span><span class="t">Settings</span></button>
       <button id="fsBtn" class="ic"><span class="i">⛶</span><span class="t">Fullscreen</span></button>
+    </div>
     </div>
     <p id="fsNote" class="sub"></p>
     <p id="soundNote" class="sub"></p>
@@ -1925,18 +1939,22 @@ const MODE_TILES=[
 const WIND_ICONS=['🍃','🌬️','💨','🌊','⛈️'];
 function pickSel(id,v){ const el=document.getElementById(id); el.value=String(v); el.dispatchEvent(new Event('change')); }
 function renderTiles(){
-  let keep=null; try{ keep = padFocusEl && padFocusEl.dataset ? padFocusEl.dataset.key : null; }catch(e){}   // padFocusEl isn't initialised on the first load-time call
-  document.getElementById('modeTiles').innerHTML = MODE_TILES.map(t=>
-    `<button class="tile${gameMode===t.v?' on':''}" data-key="m-${t.v}" data-mode="${t.v}"><span class="i">${t.i}</span>${t.n}<span class="s">${t.s}</span></button>`).join('');
-  document.getElementById('windChips').innerHTML = WINDS.map((w,i)=>
-    `<button class="chip${windPick===i?' on':''}" data-key="w-${i}" data-wind="${i}">${WIND_ICONS[i]} ${w.name} <span class="k">${w.kn} kn</span></button>`).join('');
-  document.getElementById('courseChips').innerHTML = COURSES.map((c,i)=>
-    `<button class="chip${coursePick===i?' on':''}" data-key="c-${i}" data-course="${i}">${c.name}</button>`).join('');
+  // build the buttons once, then only flip classes, so a tap never lands on a button that was just replaced
+  const mt=document.getElementById('modeTiles'), wc=document.getElementById('windChips'), cc=document.getElementById('courseChips');
+  if(!mt.children.length){
+    mt.innerHTML = MODE_TILES.map(t=>
+      `<button class="tile" data-key="m-${t.v}" data-mode="${t.v}"><span class="i">${t.i}</span>${t.n}<span class="s">${t.s}</span></button>`).join('');
+    wc.innerHTML = WINDS.map((w,i)=>
+      `<button class="chip" data-key="w-${i}" data-wind="${i}">${WIND_ICONS[i]} ${w.name} <span class="k">${w.kn} kn</span></button>`).join('');
+    cc.innerHTML = COURSES.map((c,i)=>`<button class="chip" data-key="c-${i}" data-course="${i}">${c.name}</button>`).join('');
+    mt.querySelectorAll('.tile').forEach(b=>b.addEventListener('click',()=>pickSel('selMode',b.dataset.mode)));
+    wc.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>pickSel('selWind',b.dataset.wind)));
+    cc.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>pickSel('selCourse',b.dataset.course)));
+  }
+  mt.querySelectorAll('.tile').forEach(b=>b.classList.toggle('on',b.dataset.mode===gameMode));
+  wc.querySelectorAll('.chip').forEach(b=>b.classList.toggle('on',+b.dataset.wind===windPick));
+  cc.querySelectorAll('.chip').forEach(b=>b.classList.toggle('on',+b.dataset.course===coursePick));
   document.getElementById('courseBlock').style.display = (coinMode||survMode)?'none':'';
-  document.querySelectorAll('#modeTiles .tile').forEach(b=>b.onclick=()=>pickSel('selMode',b.dataset.mode));
-  document.querySelectorAll('#windChips .chip').forEach(b=>b.onclick=()=>pickSel('selWind',b.dataset.wind));
-  document.querySelectorAll('#courseChips .chip').forEach(b=>b.onclick=()=>pickSel('selCourse',b.dataset.course));
-  if(keep){ const el=document.querySelector(`#setup [data-key="${keep}"]`); if(el) try{ setPadFocus(el); }catch(e){} }
 }
 function openSettings(){ document.getElementById('setupCard').classList.add('hidden'); document.getElementById('settingsCard').classList.remove('hidden'); setPadFocus(null); }
 function closeSettings(){ document.getElementById('settingsCard').classList.add('hidden'); document.getElementById('setupCard').classList.remove('hidden'); setPadFocus(null); buildSetup(); }
@@ -2027,7 +2045,7 @@ function setupTouch(){
   document.getElementById('course').addEventListener('pointerdown',e=>{ openSetup(); e.preventDefault(); });
 
   // stop iOS from scrolling or bouncing the page under the game
-  document.addEventListener('touchmove',e=>{ if(e.target.closest('#htCard, #hsCard')) return; e.preventDefault(); },{passive:false});
+  document.addEventListener('touchmove',e=>{ if(e.target.closest('#htCard, #hsCard, #setupCard, #settingsCard')) return; e.preventDefault(); },{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault());
 }
 setupTouch();
