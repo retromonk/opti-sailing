@@ -1759,6 +1759,8 @@ const SFX=(()=>{
       tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
     streak(m){ if(chipSound) return arp(m>=2?[784,988,1175,1568]:[659,784,988,1319],0.045,0.1);
       tone(m>=2?988:784,0.25,'sine',0.14,200); },
+    // a fish landing in the boat: a wet slap and a couple of flops
+    flop(){ noise(0.12,0.3,1500); [0,110,210].forEach((d,i)=>setTimeout(()=>tone(chipSound?660+i*220:300-i*40,0.07,chipSound?'square':'triangle',0.12,chipSound?300:-120),120+d)); },
     // played when you pick the chiptune set, so you know it worked
     powerUp(){ arp([262,330,392,523,330,392,523,659,392,523,659,1047],0.04,0.1); },
     tick(){ tone(420,0.08,'square',0.06); },
@@ -1849,6 +1851,7 @@ function resetRun(){
   clock=0; running=false; resetHabits(); CHEERS=[];
   phase = raceMode ? 'pre' : 'racing';
   countdown = raceMode ? START_SEC : 0;
+  resetFish();
   if(coinMode) seedCoins();
   if(survMode) seedSurv(); else { SURV=null; survPick=null; const lu=document.getElementById('lvlup'); if(lu) lu.classList.add('hidden'); }
   raceTime=0; pen=0; penTurn=0; penDir=0; penPrevHdg=boat.hdg;
@@ -2743,7 +2746,7 @@ function step(dt){
   const slope = waveAt(boat.x+hv.x*16, boat.y+hv.y*16, simTime) - waveAt(boat.x-hv.x*16, boat.y-hv.y*16, simTime);
   const surf = 1 + TUNING.surfGain*seaBuilt*downwind*(slope<0 ? -slope : -0.45*slope);
   boat.surf = surf;
-  const target = polarSpeed(twa*R2D, wind.spdKn) * survSpeedMul()
+  const target = polarSpeed(twa*R2D, wind.spdKn) * survSpeedMul() * fishMul()
                * power * boardBonus * flat * nose * surf * (1-TUNING.rudderDrag*Math.abs(boat.rudder));
   const rate = target>boat.spd ? TUNING.accelPerSec : TUNING.decelPerSec;
   const before = boat.spd;
@@ -2769,6 +2772,8 @@ function step(dt){
     const dw=vecOf(wind.fromDir+Math.PI), drift=0.6*(1-boat.spd/0.5);
     boat.x+=dw.x*drift*k; boat.y+=dw.y*drift*k;
   }
+
+  stepFish(dt);
 
   /* --- course --------------------------------------------- */
   if(coinMode){
@@ -3048,6 +3053,129 @@ function drawCoins(cam){
     ctx.beginPath(); ctx.arc(x,y,10+p.t*52,0,7); ctx.stroke();
     ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.font='600 17px Fredoka,sans-serif';
     ctx.textAlign='center'; ctx.fillText('+'+p.v, x, y-16-p.t*34);
+  }
+}
+
+/* ============================================================
+   FISH
+   Schools show up as rippling patches with fish leaping out.
+   Sail through one and a fish jumps into the boat: a few seconds
+   of extra speed and a "Finnnn-tastic!". Everywhere but the time
+   trial, which stays a straight test of sailing.
+   ============================================================ */
+var FISH_BOOST_SEC=4.5, FISH_BOOST=0.35, FISH_CATCH_M=7;   // var: resetRun() runs before this point on load
+var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0;
+function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=3+Math.random()*3; fishCaught=0; }
+function fishOn(){ return !raceMode; }
+function fishMul(){ return fishT>0 ? 1+FISH_BOOST*clamp(fishT/1.5,0,1) : 1; }   // fades over the last 1.5 s
+function spawnSchool(){
+  const P=TUNING.pxPerM, a=boat.hdg+(Math.random()*2-1)*1.0, d=(20+Math.random()*14)*P, v=vecOf(a);
+  SCHOOLS.push({x:boat.x+v.x*d, y:boat.y+v.y*d, t:0, used:false, hopT:0.3, ph:Math.random()*7});
+}
+function sayFintastic(){
+  cheer('FINNNN-TASTIC! 🐟','#7fe3ff',true);
+  SFX.flop();
+  if(!soundOn || !window.speechSynthesis) return;
+  try{
+    speechSynthesis.cancel();
+    // a slow, stretched "Fin" and then a quick "tastic"
+    const a=new SpeechSynthesisUtterance('Finnnn'), b=new SpeechSynthesisUtterance('tastic!');
+    a.rate=0.55; b.rate=1.25; a.pitch=b.pitch = chipSound?0.1:1.5; a.volume=b.volume=1;
+    speechSynthesis.speak(a); speechSynthesis.speak(b);
+  }catch(e){}
+}
+function stepFish(dt){
+  if(!fishOn()) return;
+  const P=TUNING.pxPerM, KP=KN*P;
+  if(fishT>0) fishT=Math.max(0,fishT-dt);
+  fishSpawnT-=dt;
+  if(fishSpawnT<=0 && SCHOOLS.filter(s=>!s.used).length<2){ spawnSchool(); fishSpawnT=5+Math.random()*5; }
+  const bv=vecOf(boat.hdg);
+  for(const sc of SCHOOLS){
+    sc.t+=dt;
+    const d=Math.hypot(sc.x-boat.x, sc.y-boat.y)/P;
+    // fish hop out of the school now and then, so you can spot it from afar
+    sc.hopT-=dt;
+    if(sc.hopT<=0 && !sc.used){ sc.hopT=0.5+Math.random()*0.8;
+      const a=Math.random()*7, r=(1+Math.random()*2)*P, v=vecOf(a);
+      LEAPS.push({x0:sc.x+v.x*r, y0:sc.y+v.y*r, x1:sc.x+v.x*r*2.6, y1:sc.y+v.y*r*2.6, t:0, dur:0.55, h:34, catch:false}); }
+    // close enough: one fish goes for the boat, aimed where she will be when it lands
+    if(!sc.used && d<FISH_CATCH_M && !boat.capsized){
+      sc.used=true; const T=0.7, sp=boat.spd*KP;
+      LEAPS.push({x0:sc.x, y0:sc.y, x1:boat.x+bv.x*sp*T, y1:boat.y+bv.y*sp*T, t:0, dur:T, h:70, catch:true});
+    }
+  }
+  for(const l of LEAPS){
+    l.t+=dt;
+    if(l.catch && !l.done && l.t>=l.dur){
+      l.done=true;
+      if(!boat.capsized){   // it homes in as it falls (see drawFish), so only a capsize loses it
+        fishT=FISH_BOOST_SEC; fishCaught++; boat.spd+=0.6; sayFintastic(); rumble(0.5,0.7,200);
+      } else { SFX.gybe(); cheer('So close!','#bfe9ff'); }
+    }
+  }
+  LEAPS=LEAPS.filter(l=>l.t<l.dur+0.35);
+  for(const sc of SCHOOLS) if(sc.used) sc.fade=(sc.fade||0)+dt;          // a used school scatters
+  SCHOOLS=SCHOOLS.filter(sc=> sc.used ? sc.fade<1.2 : sc.t<45 && Math.hypot(sc.x-boat.x,sc.y-boat.y)<120*P);
+}
+function drawFishShape(len,wig){
+  ctx.fillStyle='#5f9bb3'; ctx.strokeStyle=C.ink; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.ellipse(0,0,len*0.5,len*0.2,0,0,7); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-len*0.45,0); ctx.lineTo(-len*0.78,-len*0.22+wig); ctx.lineTo(-len*0.78,len*0.22+wig); ctx.closePath();
+  ctx.fillStyle='#3f7d97'; ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#e8f6fb'; ctx.beginPath(); ctx.ellipse(len*0.05,len*0.06,len*0.3,len*0.07,0,0,7); ctx.fill();
+  ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(len*0.3,-len*0.04,len*0.05,0,7); ctx.fill();
+}
+function drawFish(cam){
+  if(!fishOn()) return;
+  const P=TUNING.pxPerM;
+  for(const sc of SCHOOLS){
+    const x=sc.x-cam.x, y=sc.y-cam.y;
+    if(x<-80||y<-80||x>W+80||y>H+80) continue;
+    const a = sc.used ? Math.max(0,1-(sc.fade||0)/1.2) : Math.min(1,sc.t/0.8);
+    ctx.save(); ctx.translate(x,y); ctx.globalAlpha=a;
+    // ripples
+    for(let i=0;i<3;i++){ const u=((simTime*0.6+i/3)%1);
+      ctx.strokeStyle=`rgba(210,245,255,${0.45*(1-u)})`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.ellipse(0,0,(1+u*3.2)*P,(0.7+u*2.2)*P,0,0,7); ctx.stroke(); }
+    // dark shapes milling about under the surface
+    ctx.fillStyle='rgba(10,40,55,.35)';
+    for(let i=0;i<6;i++){ const ang=simTime*1.4+i*1.05+sc.ph, r=(0.8+0.6*Math.sin(i*2.1))*P*1.6;
+      ctx.save(); ctx.translate(Math.cos(ang)*r, Math.sin(ang)*r*0.7); ctx.rotate(ang+Math.PI/2);
+      ctx.beginPath(); ctx.ellipse(0,0,0.5*P,0.17*P,0,0,7); ctx.fill(); ctx.restore(); }
+    ctx.restore();
+  }
+}
+// leaping fish and the one in the boat go over the top of her
+function drawFishAir(cam){
+  if(!fishOn()) return;
+  const P=TUNING.pxPerM;
+  for(const l of LEAPS){
+    const u=Math.min(1,l.t/l.dur);
+    if(l.t>l.dur){   // the splash where it came down
+      if(l.catch) continue;
+      const x=l.x1-cam.x, y=l.y1-cam.y, s=(l.t-l.dur)/0.35;
+      ctx.strokeStyle=`rgba(230,250,255,${1-s})`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x,y,4+s*14,0,7); ctx.stroke(); continue; }
+    // a catching fish homes in on the boat as it comes down, so a small turn doesn't cheat you
+    const tx = l.catch ? lerp(l.x1,boat.x,u*u) : l.x1, ty = l.catch ? lerp(l.y1,boat.y,u*u) : l.y1;
+    const gx=lerp(l.x0,tx,u), gy=lerp(l.y0,ty,u), hgt=Math.sin(Math.PI*u)*l.h;
+    const x=gx-cam.x, y=gy-cam.y;
+    if(x<-60||y<-80||x>W+60||y>H+60) continue;
+    ctx.fillStyle='rgba(8,50,66,.22)'; ctx.beginPath(); ctx.ellipse(x,y,0.8*P*(1-hgt/160),0.28*P,0,0,7); ctx.fill();
+    const dir=Math.atan2(ty-l.y0, tx-l.x0), tilt=(0.5-u)*1.4*(Math.cos(dir)>=0?-1:1);
+    ctx.save(); ctx.translate(x,y-hgt); ctx.rotate(dir+tilt);
+    if(Math.cos(dir)<0) ctx.scale(1,-1);
+    drawFishShape(l.catch?2.2*P:1.5*P, Math.sin(simTime*30)*3); ctx.restore();
+  }
+  // the one in the boat flops about while the boost lasts
+  if(fishT>0 && !boat.capsized){
+    const x=boat.x-cam.x, y=boat.y-cam.y, hop=Math.abs(Math.sin(simTime*9))*8;
+    ctx.save(); ctx.translate(x+4,y-hop-6); ctx.rotate(Math.sin(simTime*13)*0.6);
+    drawFishShape(1.4*P, Math.sin(simTime*40)*3); ctx.restore();
+    const a=clamp(fishT/1.5,0,1); ctx.save(); ctx.globalAlpha=a; ctx.font='600 14px Fredoka,sans-serif'; ctx.textAlign='center';
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.85)'; ctx.strokeText('🐟 BOOST', x, y+52);
+    ctx.fillStyle='#7fe3ff'; ctx.fillText('🐟 BOOST', x, y+52); ctx.restore();
   }
 }
 
@@ -3583,12 +3711,14 @@ function frame(now){
     drawMark(a.x,a.y,c.name,live); drawMark(b.x,b.y,'',live);
   });
 
+  drawFish(cam);
   if(coinMode) drawCoins(cam);
   if(survMode && SURV) drawSurv(cam);
   const shielded = survMode && SURV && SURV.invuln>0;
   if(shielded) ctx.globalAlpha = Math.floor(simTime*12)%2 ? 0.35 : 1;          // she flashes while shielded
   drawBoat(boat.x-cam.x, boat.y-cam.y, d);
   ctx.globalAlpha = 1;
+  drawFishAir(cam);
   if(survMode && SURV) drawSurvOverlay(cam);
   drawCheers(cam);
   if(survMode){ /* the swarm finds you — no pointer needed */ }
