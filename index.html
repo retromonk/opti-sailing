@@ -2708,6 +2708,12 @@ async function openScoreboard(afterRun, kind){
   const qualifies = !assist && (surv ? SURV.level>1 : coinScore>0) &&
     (rows===null || rows.length<HS_N || beats(mine,rows[rows.length-1]));
   if(afterRun && assist) HS('hsSub').textContent='Crew assist was on — turn it off to enter the high scores';
+  // missed the board: say what it would have taken, so it never looks broken
+  else if(!qualifies && rows && rows.length>=HS_N){
+    const last=rows[rows.length-1];
+    HS('hsSub').textContent = surv ? `Not quite — the top ${HS_N} starts at level ${last.level} · ${fmt(last.t||0).replace(/\.\d$/,'')} afloat`
+                                   : `Not quite — the top ${HS_N} starts at ${last.score} coins`;
+  } else if(!qualifies && surv && SURV.level<=1) HS('hsSub').textContent='Reach level 2 to get on the board';
   if(qualifies){
     hsEntering=true; hsSlot=0;
     HS('hsSub').textContent='You made the top '+HS_N+' — enter your initials';
