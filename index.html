@@ -3065,7 +3065,8 @@ function drawCoins(cam){
    ============================================================ */
 var FISH_BOOST_SEC=4.5, FISH_BOOST=0.35, FISH_CATCH_M=7;   // var: resetRun() runs before this point on load
 var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0;
-function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=3+Math.random()*3; fishCaught=0; }
+// rare: the first school turns up after 25–45 s, then one every 35–65 s, one at a time
+function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=25+Math.random()*20; fishCaught=0; }
 function fishOn(){ return !raceMode; }
 function fishMul(){ return fishT>0 ? 1+FISH_BOOST*clamp(fishT/1.5,0,1) : 1; }   // fades over the last 1.5 s
 function spawnSchool(){
@@ -3089,7 +3090,7 @@ function stepFish(dt){
   const P=TUNING.pxPerM, KP=KN*P;
   if(fishT>0) fishT=Math.max(0,fishT-dt);
   fishSpawnT-=dt;
-  if(fishSpawnT<=0 && SCHOOLS.filter(s=>!s.used).length<2){ spawnSchool(); fishSpawnT=5+Math.random()*5; }
+  if(fishSpawnT<=0 && !SCHOOLS.some(s=>!s.used)){ spawnSchool(); fishSpawnT=35+Math.random()*30; }
   const bv=vecOf(boat.hdg);
   for(const sc of SCHOOLS){
     sc.t+=dt;
