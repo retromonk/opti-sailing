@@ -1299,7 +1299,160 @@ function drawWaves(cam){
     ctx.restore();
   }
 }
+/* ============================================================
+   BOSS: Octavia the octopus, at level 10
+   The sea turns red and the boss music starts. She keeps about
+   16 m off the boat and attacks with one arm at a time: it rises,
+   a red stripe on the water shows where it will land, then it
+   slams down. Get out of the stripe. Every weapon hurts her head.
+   ============================================================ */
+const BOSS_LEVEL=10, BOSS_HP=110, ARM_REACH=17, ARM_W=2.0;
+var bossTint=0;                               // 0 = blue sea, 1 = red
+function startBoss(){
+  const S=SURV, P=TUNING.pxPerM, u=vecOf(boat.hdg+0.5);
+  const g={x:boat.x+u.x*30*P, y:boat.y+u.y*30*P, kind:'boss', hp:BOSS_HP, max:BOSS_HP, r:3.4, spd:0, xp:0,
+           flash:0, wob:0, fenderHit:0, fireT:99};
+  S.gunk.push(g);
+  S.boss={g, x:g.x, y:g.y, t:0, next:3.5, last:-1, dead:false, deadT:0,
+          arms:Array.from({length:8},(_,i)=>({i, st:'rest', t:0, aim:0, raiseT:1.2}))};
+  cheer('⚠ BOSS: OCTAVIA!','#ff6b8a',true); SFX.gun(); rumble(1,1,600);
+}
+const armAng=(B,a)=>a.i*Math.PI/4 + B.t*0.25;
+function armBase(B,a){ const P=TUNING.pxPerM, u=vecOf2(armAng(B,a)); return {x:B.x+u.x*B.g.r*P*0.8, y:B.y+u.y*B.g.r*P*0.8}; }
+function vecOf2(a){ return {x:Math.cos(a), y:Math.sin(a)}; }      // plain screen angle, not a compass heading
+const ang2=(dx,dy)=>Math.atan2(dy,dx);
+function segDist(px,py,ax,ay,bx,by){ const vx=bx-ax, vy=by-ay, t=clamp(((px-ax)*vx+(py-ay)*vy)/(vx*vx+vy*vy||1),0,1);
+  return Math.hypot(px-(ax+vx*t), py-(ay+vy*t)); }
+function stepBoss(dt){
+  const S=SURV, B=S.boss; if(!B) return;
+  const P=TUNING.pxPerM, k=KN*P;
+  if(B.dead){ B.deadT+=dt; B.g.x=B.x; B.g.y=B.y; if(B.deadT>2.5) S.boss=null; return; }
+  // she plants herself while an arm is up, so the stripe on the water stays put
+  const busy=B.arms.some(a=>a.st==='raise'||a.st==='slam');
+  if(!busy) B.t+=dt;
+  // otherwise she keeps about 16 m off the boat, sidling round her
+  const dx=boat.x-B.x, dy=boat.y-B.y, d=Math.hypot(dx,dy)||1;
+  const sp=busy?0:clamp((d-16*P)/(6*P),-1,1)*3.4;
+  if(!busy){ B.x+=(dx/d*sp - dy/d*0.7)*k*dt; B.y+=(dy/d*sp + dx/d*0.7)*k*dt; }
+  // one arm at a time, faster once she is hurt
+  const angry=B.g.hp<B.g.max/2;
+  for(const a of B.arms){
+    if(a.st==='rest') continue;
+    a.t+=dt;
+    const b=armBase(B,a);
+    if(a.st==='raise'){
+      if(a.t<a.raiseT*0.2) a.aim=ang2(boat.x-b.x, boat.y-b.y);       // aims at you, then locks early so you can get clear
+      if(a.t>=a.raiseT){ a.st='slam'; a.t=0;
+        const u=vecOf2(a.aim), ex=b.x+u.x*ARM_REACH*P, ey=b.y+u.y*ARM_REACH*P;
+        if(segDist(boat.x,boat.y,b.x,b.y,ex,ey)<(ARM_W/2+0.6)*P) hurtHull('boss','Tentacle slam!');
+        for(const g of S.gunk) if(g!==B.g && !g.dead && segDist(g.x,g.y,b.x,b.y,ex,ey)<(ARM_W/2+g.r)*P) hitGunk(g,20);
+        for(let i=1;i<=4;i++) S.splashes.push({x:b.x+u.x*ARM_REACH*P*i/4, y:b.y+u.y*ARM_REACH*P*i/4, R:2.4*P, t:0});
+        SFX.splash(); rumble(0.7,0.5,220); }
+    } else if(a.st==='slam' && a.t>0.45){ a.st='lower'; a.t=0; }
+    else if(a.st==='lower' && a.t>0.6){ a.st='rest'; a.t=0; }
+  }
+  B.next-=dt;
+  if(B.next<=0 && !B.arms.some(a=>a.st==='raise'||a.st==='slam')){
+    // the arm facing you, or its neighbour if that one just went
+    const toBoat=ang2(dx,dy);
+    const order=[...B.arms].sort((p,q)=>Math.abs(normPI(armAng(B,p)-toBoat))-Math.abs(normPI(armAng(B,q)-toBoat)));
+    const a = order[0].i===B.last ? order[1] : order[0];
+    a.st='raise'; a.t=0; a.raiseT=angry?1.2:1.6; B.last=a.i;
+    B.next=a.raiseT+0.45+(angry?1.0:1.8);
+    SFX.tick();
+  }
+  B.g.x=B.x; B.g.y=B.y;
+}
+const normPI=a=>Math.atan2(Math.sin(a),Math.cos(a));
+function bossDefeated(g){
+  const S=SURV, B=S.boss, P=TUNING.pxPerM;
+  B.dead=true; B.deadT=0; S.bossDone=true; S.cleared++;
+  S.hp=Math.min(S.maxHp,S.hp+2);                                  // a reward: two hearts patched
+  for(let i=0;i<30;i++){ const a=Math.random()*7, r=Math.random()*6*P;
+    S.gems.push({x:B.x+Math.cos(a)*r, y:B.y+Math.sin(a)*r, v:Math.max(1,S.need/12), t:0}); }
+  for(let i=0;i<4;i++) S.rings.push({x:B.x,y:B.y,R:(6+i*4)*P,t:0});
+  cheer('🐙 OCTAVIA DEFEATED!','#ffd66b',true); SFX.cheer(); setTimeout(()=>SFX.powerUp(),300); rumble(1,1,800);
+}
+function drawTentacle(x0,y0,ang,len,wid,lift,phase,col){
+  const N=16, pts=[];
+  const u={x:Math.cos(ang),y:Math.sin(ang)}, n={x:-u.y,y:u.x};
+  for(let i=0;i<=N;i++){ const s=i/N, wig=Math.sin(s*5+phase)*wid*0.9*s*(1-lift*0.6);
+    const along=len*s*(1-lift*0.75);
+    pts.push({x:x0+u.x*along+n.x*wig, y:y0+u.y*along+n.y*wig - lift*len*0.95*Math.sin(s*Math.PI*0.55), w:wid*(1-s*0.78)}); }
+  if(lift>0.05){ // its shadow on the water
+    ctx.fillStyle='rgba(8,30,40,.25)'; ctx.beginPath(); ctx.ellipse(x0+u.x*len*0.25,y0+u.y*len*0.25,wid*1.3,wid*0.6,ang,0,7); ctx.fill(); }
+  ctx.strokeStyle=C.ink; ctx.lineCap='round';
+  for(const pass of [0,1]){
+    for(let i=0;i<N;i++){ const p=pts[i], q=pts[i+1];
+      ctx.lineWidth = pass ? p.w*2 : p.w*2+4; ctx.strokeStyle = pass ? col : C.ink;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.stroke(); } }
+  ctx.fillStyle='#ffd1e4';                    // suckers
+  for(let i=2;i<N;i+=2){ const p=pts[i]; ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(1.5,p.w*0.35),0,7); ctx.fill(); }
+}
+function drawBoss(cam){
+  const S=SURV, B=S.boss; if(!B) return;
+  const P=TUNING.pxPerM, x=B.x-cam.x, y=B.y-cam.y, R=B.g.r*P;
+  const fade = B.dead ? Math.max(0,1-B.deadT/2.5) : 1;
+  ctx.save(); ctx.globalAlpha=fade;
+  const col = B.g.flash>0 ? '#ffffff' : '#ff8fc0';
+  // warning stripes on the water where a raised arm will land
+  for(const a of B.arms) if(a.st==='raise'){
+    const b=armBase(B,a), u=vecOf2(a.aim), f=a.t/a.raiseT, blink=f>0.75 && Math.floor(simTime*14)%2;
+    ctx.save(); ctx.translate(b.x-cam.x,b.y-cam.y); ctx.rotate(a.aim);
+    ctx.fillStyle=`rgba(255,40,60,${blink?0.55:0.15+0.3*f})`; ctx.fillRect(0,-ARM_W/2*P,ARM_REACH*P,ARM_W*P);
+    ctx.strokeStyle='rgba(255,220,220,.7)'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(0,-ARM_W/2*P,ARM_REACH*P,ARM_W*P); ctx.setLineDash([]);
+    ctx.restore(); }
+  // arms on the water first, the head over them, raised arms on top
+  const armGeom=a=>{ const b=armBase(B,a), base=armAng(B,a), rest=6*P;
+    if(a.st==='raise'){ const f=Math.min(1,a.t/a.raiseT); return {b, ang:base+normPI(a.aim-base)*f, len:rest+3*P*f, lift:f}; }
+    if(a.st==='slam'){ const f=Math.min(1,a.t/0.08); return {b, ang:a.aim, len:lerp(rest,ARM_REACH*P,f), lift:0}; }
+    if(a.st==='lower'){ const f=Math.min(1,a.t/0.6); return {b, ang:a.aim+normPI(base-a.aim)*f, len:lerp(ARM_REACH*P,rest,f), lift:0}; }
+    return {b, ang:base, len:rest, lift:0}; };
+  const wid=0.55*P;
+  for(const a of B.arms) if(a.st!=='raise'){ const g=armGeom(a);
+    drawTentacle(g.b.x-cam.x,g.b.y-cam.y,g.ang,g.len,wid,0,B.t*3+a.i,'#f27aae'); }
+  // head
+  const bob=Math.sin(B.t*2.2)*3, sc=B.dead?1+B.deadT*0.3:1;
+  ctx.save(); ctx.translate(x,y+bob); ctx.scale(sc,sc); if(B.dead) ctx.rotate(B.deadT*4);
+  const grd=ctx.createRadialGradient(-R*0.35,-R*0.45,R*0.1,0,0,R*1.1);
+  grd.addColorStop(0, B.g.flash>0?'#fff':'#ffc2dc'); grd.addColorStop(1,col);
+  ctx.fillStyle=grd; ctx.beginPath(); ctx.ellipse(0,-R*0.15,R,R*1.08,0,0,7); ctx.fill();
+  ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.stroke();
+  // spots
+  ctx.fillStyle='rgba(224,85,154,.45)';
+  for(const [sx,sy,sr] of [[-0.5,-0.7,0.14],[0.45,-0.8,0.1],[0.62,-0.35,0.08],[-0.7,-0.25,0.08]]){ ctx.beginPath(); ctx.arc(sx*R,sy*R,sr*R,0,7); ctx.fill(); }
+  // big shiny eyes that watch you
+  const look=vecOf2(ang2(boat.x-B.x,boat.y-B.y)), er=R*0.26, angry=B.g.hp<B.g.max/2;
+  for(const sgn of [-1,1]){
+    const ex=sgn*R*0.38, ey=R*0.02;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex,ey,er,0,7); ctx.fill(); ctx.strokeStyle=C.ink; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(ex+look.x*er*0.35,ey+look.y*er*0.35,er*0.62,0,7); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex+look.x*er*0.35-er*0.22,ey+look.y*er*0.35-er*0.25,er*0.22,0,7); ctx.fill();
+    if(angry){ ctx.strokeStyle=C.ink; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(ex-sgn*er*0.9,ey-er*1.45); ctx.lineTo(ex+sgn*er*0.7,ey-er*1.05); ctx.stroke(); }
+  }
+  ctx.fillStyle='rgba(255,90,140,.5)';        // blush
+  for(const sgn of [-1,1]){ ctx.beginPath(); ctx.ellipse(sgn*R*0.68,R*0.34,R*0.15,R*0.09,0,0,7); ctx.fill(); }
+  ctx.strokeStyle=C.ink; ctx.lineWidth=2.5; ctx.beginPath();   // a little smile, an "o" when cross
+  if(angry){ ctx.arc(0,R*0.45,R*0.1,0,7); } else ctx.arc(0,R*0.32,R*0.16,0.2*Math.PI,0.8*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+  for(const a of B.arms) if(a.st==='raise'){ const g=armGeom(a);
+    drawTentacle(g.b.x-cam.x,g.b.y-cam.y,g.ang,g.len,wid*1.15,g.lift,B.t*6+a.i,'#f27aae'); }
+  ctx.restore();
+}
+function drawBossBar(){
+  const B=SURV&&SURV.boss; if(!B || B.dead) return;
+  const w=Math.min(420,W*0.5), x=W/2-w/2, y=isTouch?84:112, f=Math.max(0,B.g.hp/B.g.max);
+  ctx.save();
+  ctx.fillStyle='rgba(16,51,63,.85)'; ctx.fillRect(x-4,y-4,w+8,22);
+  ctx.fillStyle='#5a1a2a'; ctx.fillRect(x,y,w,14);
+  ctx.fillStyle= f<0.5 ? '#ff4d6d' : '#ff8fc0'; ctx.fillRect(x,y,w*f,14);
+  ctx.font='600 14px Fredoka,sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#fff';
+  ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.9)'; ctx.strokeText('🐙 OCTAVIA',W/2,y-8); ctx.fillText('🐙 OCTAVIA',W/2,y-8);
+  ctx.restore();
+}
 function killGunk(g){
+  if(g.kind==='boss'){ if(!SURV.boss.dead) bossDefeated(g); g.dead=true; return; }
   g.dead=true; SURV.cleared++;
   const n = g.xp>=10 ? 5 : g.xp>=3 ? 2 : 1;
   for(let i=0;i<n;i++) SURV.gems.push({x:g.x+(Math.random()*2-1)*g.r*TUNING.pxPerM*0.6, y:g.y+(Math.random()*2-1)*g.r*TUNING.pxPerM*0.6, v:g.xp/n, t:0});
@@ -1313,7 +1466,7 @@ function stepSurv(dt){
   S.t+=dt; S.invuln=Math.max(0,S.invuln-dt); S.fouled=Math.max(0,(S.fouled||0)-dt); S.flash=Math.max(0,(S.flash||0)-dt);
 
   // the swarm grows
-  const rate = Math.min(1.4 + S.t*0.035, 8);
+  const rate = Math.min(1.4 + S.t*0.035, 8) * (S.boss && !S.boss.dead ? 0.25 : 1);
   S.spawnAcc += rate*dt;
   while(S.spawnAcc>=1 && S.gunk.length<200){ S.spawnAcc--; spawnGunk(); }
 
@@ -1321,6 +1474,7 @@ function stepSurv(dt){
   const dw = vecOf(wind.fromDir+Math.PI);
   const base = Math.min(1.7 + S.t*0.009, 3.6);
   for(const g of S.gunk){
+    if(g.kind==='boss') continue;
     const dx=boat.x-g.x, dy=boat.y-g.y, dd=Math.hypot(dx,dy)||1;
     let s=base*g.spd;
     if(g.kind==='spit'){ const m=dd/P; s = m<13 ? -0.7*s : m<19 ? 0 : s; }     // hang back at range
@@ -1365,6 +1519,11 @@ function stepSurv(dt){
     const d=Math.hypot(g.x-boat.x,g.y-boat.y);
     if(S.invuln>0 && d < 4*P+g.r*P){                       // the shield bubble
       const u=vecOf(angOf(g.x-boat.x,g.y-boat.y)); g.x=boat.x+u.x*(4*P+g.r*P); g.y=boat.y+u.y*(4*P+g.r*P); continue; }
+    if(g.kind==='boss'){                                    // her head: bounce off it
+      if(d < hullR+g.r*P){ const u=vecOf(angOf(boat.x-g.x,boat.y-g.y)); boat.x=g.x+u.x*(hullR+g.r*P+2); boat.y=g.y+u.y*(hullR+g.r*P+2);
+        if(boat.spd>RAM_KN && !boat.capsized){ if(g.fenderHit<=0){ hitGunk(g,6*boat.spd); g.fenderHit=1; cheer('BONK!','#ffd66b',true); SFX.gun(); rumble(0.8,0.6,200); } boat.spd*=0.4; }
+        else hurtHull('boss','Too slow to bonk her!'); }
+      continue; }
     if(d < hullR+g.r*P){
       if(boat.spd>RAM_KN && !boat.capsized){
         hitGunk(g, 2*boat.spd);
@@ -1381,6 +1540,9 @@ function stepSurv(dt){
     if(S.squirtT<=0){
       let near=null, nd=28*P;
       for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y); if(d<nd){nd=d; near=g;} }
+      // in the boss fight, shoot her unless something is right on top of you
+      const bg=S.boss && !S.boss.dead ? S.boss.g : null;
+      if(bg && Math.hypot(bg.x-boat.x,bg.y-boat.y)<28*P && (!near || nd>6*P)) near=bg;
       if(near){
         // a steady beat: slow to start, faster and harder with each upgrade, and a spread at levels 3 and 5
         const lv=survLvl('squirt'), n=lv>=5?3:lv>=3?2:1, a0=angOf(near.x-boat.x,near.y-boat.y), bvv=vecOf(boat.hdg);
@@ -1473,9 +1635,13 @@ function stepSurv(dt){
     if(d<1.6*P){ s.got=true; S.xp+=s.v*habits.mult; SFX.coin(habits.mult); }
   }
   S.gems=S.gems.filter(s=>!s.got && s.t<40);
-  S.gunk=S.gunk.filter(g=>!g.dead && Math.hypot(g.x-boat.x,g.y-boat.y)<Math.hypot(W,H)/P*2*P);
+  S.gunk=S.gunk.filter(g=>!g.dead && (g.kind==='boss' || Math.hypot(g.x-boat.x,g.y-boat.y)<Math.hypot(W,H)/P*2*P));
   S.rings=S.rings.filter(r=>(r.t+=dt)<0.5);
   stepWaves(dt);
+  // the boss: at level 10, once. It also puts her head back where she is, whatever shoved it
+  if(!S.boss && !S.bossDone && S.level>=BOSS_LEVEL) startBoss();
+  stepBoss(dt);
+  bossTint = clamp(bossTint + ((S.boss && !S.boss.dead)?1:-1)*dt/1.5, 0, 1);
 
   if(S.xp>=S.need) openLevelUp();
 }
@@ -1560,8 +1726,10 @@ function drawSurv(cam){
     ctx.strokeStyle=`rgba(223,244,248,${0.7*(1-r.t/0.5)})`; ctx.lineWidth=6*(1-r.t/0.5)+1;
     ctx.beginPath(); ctx.arc(r.x-cam.x,r.y-cam.y,r.R*(0.4+r.t/0.5*0.6),0,7); ctx.stroke();
   }
+  drawBoss(cam);
   // gunk
   for(const g of S.gunk){
+    if(g.kind==='boss') continue;
     const x=g.x-cam.x, y=g.y-cam.y, R=g.r*P;
     if(x<-R*2||y<-R*2||x>W+R*2||y>H+R*2) continue;
     ctx.beginPath();
@@ -1623,6 +1791,7 @@ function drawSurv(cam){
 function drawSurvOverlay(cam){
   const S=SURV;
   drawWaves(cam);
+  drawBossBar();
   if(S.invuln>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, R=4*TUNING.pxPerM, f=S.invuln/SURV_INVULN;
     ctx.fillStyle=`rgba(223,244,248,${0.10+0.08*Math.sin(simTime*9)})`; ctx.beginPath(); ctx.arc(bx,by,R,0,7); ctx.fill();
     ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*f})`; ctx.lineWidth=3; ctx.setLineDash([10,6]); ctx.lineDashOffset=-simTime*30;
@@ -1761,7 +1930,7 @@ function drawCheers(cam){
 
 /* ---------------- sound: synthesised, no files ---------------- */
 const SFX=(()=>{
-  let ac=null, flutter=null, flutterGain=null, lastCoin=0, rushSrc=null, rushFilt=null, rushGain=null;
+  let ac=null, flutter=null, flutterGain=null, lastCoin=0, rushSrc=null, rushFilt=null, rushGain=null, mus=null;
   const ctxOk=()=>{ if(!soundOn) return null; if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; };
   /* Chiptune mode runs everything through a 4-bit crusher, and swaps smooth
      sounds for what an old console could make: square and triangle waves
@@ -1825,6 +1994,35 @@ const SFX=(()=>{
       tone(m>=2?988:784,0.25,'sine',0.14,200); },
     // a fish landing in the boat: a wet slap and a couple of flops
     flop(){ noise(0.12,0.3,1500); [0,110,210].forEach((d,i)=>setTimeout(()=>tone(chipSound?660+i*220:300-i*40,0.07,chipSound?'square':'triangle',0.12,chipSound?300:-120),120+d)); },
+    /* BOSS MUSIC: a driving A-minor loop, scheduled a little ahead of time.
+       Am, F, G, E: bass on the eighths, a square-wave arpeggio on the
+       sixteenths, kick on the beat and a hat off it. Idempotent: the game
+       calls it every frame with whether it should be playing. */
+    music(on){
+      if(!on || !soundOn){ if(mus){ const m=mus; mus=null; clearInterval(m.iv);
+          try{ m.g.gain.setTargetAtTime(0,m.a.currentTime,0.15); setTimeout(()=>m.g.disconnect(),800); }catch(e){} } return; }
+      if(mus) return;
+      const a=ctxOk(); if(!a || a.state!=='running') return;
+      const g=a.createGain(); g.gain.value=0; g.gain.setTargetAtTime(0.55,a.currentTime,0.3); g.connect(out(a));
+      const hatBuf=a.createBuffer(1,a.sampleRate*0.05,a.sampleRate), hd=hatBuf.getChannelData(0);
+      for(let i=0;i<hd.length;i++) hd[i]=(Math.random()*2-1)*(1-i/hd.length);
+      const S16=60/152/4, N=f=>440*Math.pow(2,(f-69)/12);
+      const chords=[[57,60,64],[53,57,60],[55,59,62],[52,56,59]];          // Am F G E
+      const noteAt=(f,t,dur,vol,type)=>{ const o=a.createOscillator(), e=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,t);
+        e.gain.setValueAtTime(vol,t); e.gain.exponentialRampToValueAtTime(0.001,t+dur); o.connect(e).connect(g); o.start(t); o.stop(t+dur+0.02); };
+      const play=(step,t)=>{
+        const bar=Math.floor(step/16)%4, st=step%16, ch=chords[bar];
+        if(st%2===0) noteAt(N(ch[0]-24+(st%8===6?12:0)), t, S16*1.8, 0.16, 'triangle');                 // bass
+        const arp=[0,1,2,1, 2,0,1,2]; const top=Math.floor(step/64)%2 ? 12 : 0;
+        noteAt(N(ch[arp[st%8]]+12+top), t, S16*0.9, 0.045, 'square');                                 // lead
+        if(st%4===0){ const o=a.createOscillator(), e=a.createGain(); o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+          e.gain.setValueAtTime(0.35,t); e.gain.exponentialRampToValueAtTime(0.001,t+0.14); o.connect(e).connect(g); o.start(t); o.stop(t+0.16); }   // kick
+        if(st%4===2){ const n=a.createBufferSource(); n.buffer=hatBuf; const hp=a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=6000;
+          const e=a.createGain(); e.gain.value=0.12; n.connect(hp).connect(e).connect(g); n.start(t); }                                          // hat
+      };
+      mus={a, g, step:0, next:a.currentTime+0.1};
+      mus.iv=setInterval(()=>{ if(!mus) return; while(mus.next<a.currentTime+0.25){ play(mus.step,mus.next); mus.step++; mus.next+=S16; } },50);
+    },
     // played when you pick the chiptune set, so you know it worked
     powerUp(){ arp([262,330,392,523,330,392,523,659,392,523,659,1047],0.04,0.1); },
     tick(){ tone(420,0.08,'square',0.06); },
@@ -1917,6 +2115,7 @@ function resetRun(){
   countdown = raceMode ? START_SEC : 0;
   resetFish();
   if(coinMode) seedCoins();
+  bossTint=0;
   if(survMode) seedSurv(); else { SURV=null; survPick=null; const lu=document.getElementById('lvlup'); if(lu) lu.classList.add('hidden'); }
   raceTime=0; pen=0; penTurn=0; penDir=0; penPrevHdg=boat.hdg;
   ocs=false; started=!raceMode; hitCool=0;
@@ -2948,8 +3147,10 @@ const C = { sea:'#1d7f9c', deep:'#14607a', foam:'#dff4f8', ink:'#10333f',
             vest:'#ffc63d', skin:'#f0c39a', cap:'#2f6f8f', board:'#8fd9e8', sun:'#ffd66b', buoy:'#f2683a' };
 
 /* cartoon water: crest arcs drawn straight from the wave function */
+function mixHex(a,b,t){ const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)), A=p(a), B=p(b);
+  return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')+')'; }
 function drawWater(cam){
-  ctx.fillStyle=C.sea; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = bossTint>0 ? mixHex(C.sea,'#b0102a',bossTint) : C.sea; ctx.fillRect(0,0,W,H);
   const gs=46;
   const w=vecOf(wind.fromDir+Math.PI);
   ctx.lineCap='round';
@@ -3745,6 +3946,7 @@ function frame(now){
   if(upright && rotateTick++%30===0) document.getElementById('rotateNote').textContent =
     (!paused && !boardOpen && !howtoOpen && !padcardOpen) ? 'The clock is waiting for you' : 'The game is played in landscape';
   const survHold = survMode && SURV && (survPick || SURV.over);
+  SFX.music(!!(survMode && SURV && SURV.boss && !SURV.boss.dead && !SURV.over && !paused));
   if(paused||upright||survHold){ acc=0; simTime+=dts*0.4; }   // sea keeps moving, boat does not — and the clock waits
   else { acc+=dts; while(acc>=FIXED){ d=step(FIXED); acc-=FIXED; } }
 
