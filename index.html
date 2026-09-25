@@ -3343,7 +3343,9 @@ function spawnSchool(pink=false){
 function sayFintastic(){
   cheer('FINNNN-TASTIC! 🐟','#7fe3ff',true);
   SFX.flop();
-  if(!soundOn || !window.speechSynthesis) return;
+  // the spoken line is off for now (device voices mangled it); flip this to bring it back
+  const FISH_VOICE=false;
+  if(!FISH_VOICE || !soundOn || !window.speechSynthesis) return;
   try{
     speechSynthesis.cancel();
     // a slow, stretched "Fin" and then a quick "tastic"
