@@ -3075,15 +3075,13 @@ function drawCoins(cam){
    trial, which stays a straight test of sailing.
    ============================================================ */
 var FISH_BOOST_SEC=4.5, FISH_BOOST=0.35, FISH_CATCH_M=7;   // var: resetRun() runs before this point on load
-var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0, fishPink=false;
+var SCHOOLS=[], LEAPS=[], fishT=0, fishSpawnT=4, fishCaught=0, fishPink=false, pinkT=-1;
 // rare: the first school turns up after 25–45 s, then one every 35–65 s, one at a time
-function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=25+Math.random()*20; fishCaught=0; }
+function resetFish(){ SCHOOLS=[]; LEAPS=[]; fishT=0; fishSpawnT=25+Math.random()*20; fishCaught=0; pinkT=-1; }
 function fishOn(){ return !raceMode; }
 function fishMul(){ return fishT>0 ? 1+FISH_BOOST*clamp(fishT/1.5,0,1) : 1; }   // fades over the last 1.5 s
-function spawnSchool(){
-  const P=TUNING.pxPerM, a=boat.hdg+(Math.random()*2-1)*1.0, d=(20+Math.random()*14)*P, v=vecOf(a);
-  // in the swarm, a hurt boat sometimes meets a rare pink school: its fish mends a heart
-  const pink = survMode && SURV && SURV.hp<SURV.maxHp && Math.random()<0.25;
+function spawnSchool(pink=false){
+  const P=TUNING.pxPerM, a=boat.hdg+(Math.random()*2-1)*(pink?0.7:1.0), d=(pink?16+Math.random()*8:20+Math.random()*14)*P, v=vecOf(a);
   SCHOOLS.push({x:boat.x+v.x*d, y:boat.y+v.y*d, t:0, used:false, hopT:0.3, ph:Math.random()*7, pink});
 }
 function sayFintastic(){
@@ -3103,7 +3101,16 @@ function stepFish(dt){
   const P=TUNING.pxPerM, KP=KN*P;
   if(fishT>0) fishT=Math.max(0,fishT-dt);
   fishSpawnT-=dt;
-  if(fishSpawnT<=0 && !SCHOOLS.some(s=>!s.used)){ spawnSchool(); fishSpawnT=35+Math.random()*30; }
+  if(fishSpawnT<=0 && !SCHOOLS.some(s=>!s.used && !s.pink)){ spawnSchool(); fishSpawnT=35+Math.random()*30; }
+  /* Pink schools, swarm only: their fish mends a heart. They keep their own
+     clock, since a hurt boat rarely lasts long: the first comes 12–20 s after
+     you lose a heart, then at most one every 40–60 s while you are still hurt. */
+  if(survMode && SURV && !SURV.over){
+    const hurt = SURV.hp<SURV.maxHp, pinkOut = SCHOOLS.some(s=>s.pink && !s.used);
+    if(!hurt) pinkT=-1;
+    else if(pinkT<0) pinkT=12+Math.random()*8;
+    else if(!pinkOut && (pinkT-=dt)<=0){ spawnSchool(true); pinkT=40+Math.random()*20; }
+  }
   const bv=vecOf(boat.hdg);
   for(const sc of SCHOOLS){
     sc.t+=dt;
@@ -3132,7 +3139,7 @@ function stepFish(dt){
   }
   LEAPS=LEAPS.filter(l=>l.t<l.dur+0.35);
   for(const sc of SCHOOLS) if(sc.used) sc.fade=(sc.fade||0)+dt;          // a used school scatters
-  SCHOOLS=SCHOOLS.filter(sc=> sc.used ? sc.fade<1.2 : sc.t<45 && Math.hypot(sc.x-boat.x,sc.y-boat.y)<120*P);
+  SCHOOLS=SCHOOLS.filter(sc=> sc.used ? sc.fade<1.2 : sc.t<(sc.pink?30:45) && Math.hypot(sc.x-boat.x,sc.y-boat.y)<120*P);
 }
 const FISH_BLUE=['#5f9bb3','#3f7d97','#e8f6fb'], FISH_PINK=['#ff8fc0','#e0609c','#ffe3f0'];
 function drawFishShape(len,wig,pink){
