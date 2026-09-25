@@ -1201,6 +1201,9 @@ const SURV_UPGRADES = [
   { id:'bottom', name:'Clean bottom',   icon:'🚤', text:l=>'Sail 4% faster' },
   { id:'spray',  name:'Bow spray',      icon:'💧', text:l=>l===0?'Above 2.8 kn the bow throws a cone of spray ahead':'Wider, harder spray' },
   { id:'ties',   name:'Sail ties',      icon:'🪢', text:l=>`Gloop fouls the sail for ${(3-0.4*(l+1)).toFixed(1)}s (was ${(3-0.4*l).toFixed(1)}s) and slows you ${25-3*(l+1)}% (was ${25-3*l}%)` },
+  { id:'rudder', name:'Big rudder',     icon:'🌀', text:l=>
+      `Clean-tack waves reach ${WAVE_R+3*(l+1)} m (was ${WAVE_R+3*l}), hit for ${6+3*(l+1)} (was ${6+3*l}), every ${waveCool(l+1)} s (was ${waveCool(l)})`+
+      (l===4?' — and a second wave rolls out right behind the first':'') },
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
@@ -1210,7 +1213,7 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0} };   // you start with the bailer
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0} };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1256,16 +1259,19 @@ function hurtHull(src,why){
 /* TIDAL WAVE: a clean tack sends a big wave rolling out from the boat. Its
    front hits each gunk once as it passes, shoves it outward and pops gloop. */
 const WAVE_R=18, WAVE_SEC=1.1;
+// the Big rudder upgrade: wider, harder, more often, and a double wave at the top level
+const waveCool=l=>Math.max(2, 5-0.6*l).toFixed(1).replace(/\.0$/,'');
 function survWave(){
-  const S=SURV; S.waves=S.waves||[];
-  S.waves.push({x:boat.x, y:boat.y, t:0, hit:new Set()});
+  const S=SURV, lv=survLvl('rudder'); S.waves=S.waves||[];
+  S.waves.push({x:boat.x, y:boat.y, t:0, hit:new Set(), R:WAVE_R+3*lv});
+  if(lv>=5) S.waves.push({x:boat.x, y:boat.y, t:-0.35, hit:new Set(), R:WAVE_R+3*lv});
   cheer('🌊 TIDAL WAVE!','#8fd9e8',true); SFX.surf(); SFX.gun(); rumble(1,0.7,500);
 }
 function stepWaves(dt){
   const S=SURV, P=TUNING.pxPerM; if(!S.waves) return;
-  const dmg = 6 + 2*survLvl('boom');
+  const dmg = 6 + 3*survLvl('rudder');
   for(const w of S.waves){
-    w.t+=dt; const front=WAVE_R*P*Math.min(1,w.t/WAVE_SEC);
+    w.t+=dt; if(w.t<0) continue; const front=w.R*P*Math.min(1,w.t/WAVE_SEC);
     for(const g of S.gunk){ if(g.dead || w.hit.has(g)) continue;
       const d=Math.hypot(g.x-w.x,g.y-w.y);
       if(d<front+g.r*P){ w.hit.add(g); hitGunk(g,dmg);
@@ -1277,7 +1283,8 @@ function stepWaves(dt){
 function drawWaves(cam){
   const S=SURV, P=TUNING.pxPerM; if(!S.waves) return;
   for(const w of S.waves){
-    const u=Math.min(1,w.t/WAVE_SEC), R=WAVE_R*P*u, a=w.t<WAVE_SEC?1:1-(w.t-WAVE_SEC)/0.3;
+    if(w.t<0) continue;
+    const u=Math.min(1,w.t/WAVE_SEC), R=w.R*P*u, a=w.t<WAVE_SEC?1:1-(w.t-WAVE_SEC)/0.3;
     const x=w.x-cam.x, y=w.y-cam.y;
     ctx.save(); ctx.globalAlpha=Math.max(0,a);
     // the swell: a dark trough inside a bright, foaming crest
@@ -1703,7 +1710,7 @@ function trackHabits(dt, twaDeg, side){
       h.tackJudged=true; h.clean++;
       if(survMode && SURV && !SURV.over){
         // one wave per 5 s, so tacking on the spot can't spam them
-        if(h.t-(h.lastWave??-99)>5){ h.lastWave=h.t; survWave(); } else cheer('Clean tack!','#3fb877',true); }
+        if(h.t-(h.lastWave??-99)>+waveCool(survLvl('rudder'))){ h.lastWave=h.t; survWave(); } else cheer('Clean tack!','#3fb877',true); }
       else bonusCoins(1,'Clean tack!');
     } else if(h.t-h.tackAt>4) h.tackJudged=true;
   }
