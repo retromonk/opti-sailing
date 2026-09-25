@@ -1204,16 +1204,20 @@ const SURV_UPGRADES = [
   { id:'rudder', name:'Big rudder',     icon:'🌀', text:l=>
       `Clean-tack waves reach ${WAVE_R+3*(l+1)} m (was ${WAVE_R+3*l}), hit for ${6+3*(l+1)} (was ${6+3*l}), every ${waveCool(l+1)} s (was ${waveCool(l)})`+
       (l===4?' — and a second wave rolls out right behind the first':'') },
+  { id:'lunch',  name:'Uneaten lunch',  icon:'🥪', text:l=>l===0?'Toss the lunch you were never going to eat. Gunk swarms it — then it goes off in a soggy splat':
+      l===4?'Pack two lunches (you won\'t eat either)':'A bigger, soggier splat, and lunch goes over more often' },
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
+const LUNCH_FOOD=['🥪','🍎','🧃','🍌','🥨','🧀'];
+const LUNCH_LINES=['Still wrapped!','Mum packed that…','Not hungry anyway','Lunch overboard!','Soggy sandwich away!','Who even likes crusts?'];
 let SURV = null, survPick = null;
 
 function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
-           spit:[], lobs:[], splashes:[], sprayT:0, lobT:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0} };   // you start with the bailer
+           spit:[], lobs:[], splashes:[], sprayT:0, lobT:0, lunches:[], lunchT:2,
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0} };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1475,7 +1479,10 @@ function stepSurv(dt){
   const base = Math.min(1.7 + S.t*0.009, 3.6);
   for(const g of S.gunk){
     if(g.kind==='boss') continue;
-    const dx=boat.x-g.x, dy=boat.y-g.y, dd=Math.hypot(dx,dy)||1;
+    // a lunch in the water is more tempting than you are
+    let tx=boat.x, ty=boat.y;
+    for(const l of S.lunches){ if(Math.hypot(l.x-g.x,l.y-g.y)<14*P){ tx=l.x; ty=l.y; break; } }
+    const dx=tx-g.x, dy=ty-g.y, dd=Math.hypot(dx,dy)||1;
     let s=base*g.spd;
     if(g.kind==='spit'){ const m=dd/P; s = m<13 ? -0.7*s : m<19 ? 0 : s; }     // hang back at range
     g.x += (dx/dd*s + dw.x*0.55)*k*dt;
@@ -1604,6 +1611,30 @@ function stepSurv(dt){
   S.lobs=S.lobs.filter(l=>!l.done);
   S.splashes=S.splashes.filter(p=>(p.t+=dt)<0.45);
 
+  /* UNEATEN LUNCH: nobody eats the lunch they take out in the boat, so it goes
+     over the side. Gunk nearby can't resist and swarms it; a few seconds later
+     (or once three are on it) it goes off in a soggy splat. */
+  const lv=survLvl('lunch');
+  if(lv>0){
+    S.lunchT-=dt;
+    if(S.lunchT<=0){
+      S.lunchT=Math.max(4, 9-1.1*lv);
+      const n=lv>=5?2:1;
+      for(let i=0;i<n;i++){ const a=boat.hdg+Math.PI+(Math.random()*2-1)*0.9+(n>1?(i?0.7:-0.7):0), u=vecOf(a), d=(4+Math.random()*3)*P;
+        S.lunches.push({x:boat.x+u.x*d, y:boat.y+u.y*d, t:0, fuse:3.5, food:LUNCH_FOOD[Math.floor(Math.random()*LUNCH_FOOD.length)], ph:Math.random()*7}); }
+      if(Math.random()<0.6) cheer(LUNCH_LINES[Math.floor(Math.random()*LUNCH_LINES.length)],'#ffe9b0'); SFX.tick();
+    }
+  }
+  for(const l of S.lunches){
+    l.t+=dt; let eating=0;
+    for(const g of S.gunk) if(!g.dead && g.kind!=='boss' && Math.hypot(g.x-l.x,g.y-l.y)<(g.r+1)*P) eating++;
+    if(l.t>=l.fuse || eating>=3){ l.done=true; const R=(3.2+0.7*lv)*P;
+      S.splashes.push({x:l.x,y:l.y,R,t:0}); S.splashes.push({x:l.x,y:l.y,R:R*0.6,t:0});
+      for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-l.x,g.y-l.y)<R+g.r*P) hitGunk(g,4+2*lv);
+      SFX.splash(); }
+  }
+  S.lunches=S.lunches.filter(l=>!l.done);
+
   // SPITTERS lob gloop at you — slow, wind-borne, and a tack swats it away
   for(const g of S.gunk){
     if(g.dead || g.kind!=='spit') continue;
@@ -1727,6 +1758,13 @@ function drawSurv(cam){
     ctx.beginPath(); ctx.arc(r.x-cam.x,r.y-cam.y,r.R*(0.4+r.t/0.5*0.6),0,7); ctx.stroke();
   }
   drawBoss(cam);
+  // lunches bobbing in the water, flashing as they are about to go off
+  for(const l of S.lunches){ const x=l.x-cam.x, y=l.y-cam.y+Math.sin(simTime*3+l.ph)*2, f=l.t/l.fuse;
+    ctx.strokeStyle=`rgba(255,233,176,${0.35+0.4*(f>0.7 && Math.floor(simTime*10)%2)})`; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,1.3*P+Math.sin(simTime*5)*2,0,7); ctx.stroke();
+    ctx.font=Math.round(2.1*P)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.save(); ctx.translate(x,y); ctx.rotate(Math.sin(simTime*2+l.ph)*0.25); ctx.fillText(l.food,0,0); ctx.restore();
+    ctx.textBaseline='alphabetic'; }
   // gunk
   for(const g of S.gunk){
     if(g.kind==='boss') continue;
