@@ -376,6 +376,10 @@
     border-radius:16px;padding:12px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
     text-align:center;transition:transform .12s}
   .lu.sel,.lu:hover{border-color:var(--sun);transform:translateY(-3px)}
+  .lu.extreme{background:linear-gradient(160deg,#3a1d5c,#123a4a 60%,#1d4f5e);border-color:#c78bff;animation:extremeGlow 1.1s ease-in-out infinite}
+  .lu.extreme .lv{color:#e7c6ff;letter-spacing:.08em;font-weight:600} .lu.extreme b{color:#fff;letter-spacing:.1em}
+  .lu.extreme.sel,.lu.extreme:hover{border-color:#fff}
+  @keyframes extremeGlow{50%{box-shadow:0 0 22px 4px rgba(199,139,255,.55)}}
   .lu .ic{font-size:28px} .lu b{font-size:15px}
   .lu .lv{color:var(--sun);letter-spacing:.15em;font-size:11px} .lu .tx{font-size:12.5px;color:rgba(255,255,255,.75);line-height:1.35}
   #luCard .btns{display:flex;gap:9px;justify-content:center;margin-top:6px}
@@ -1253,6 +1257,11 @@ const SURV_UPGRADES = [
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
+/* SHARKNADO: the extreme one. Never in the normal pool: from level 7 each
+   level-up has a 1 in 10 chance of offering it in place of a card, once a run. */
+const SHARKNADO={ id:'sharknado', name:'SHARKNADO', icon:'🦈🌪️', extreme:true, max:1,
+  text:()=>'A tornado full of sharks circles your boat, sucking in gunk and flinging sharks at anything big. You won\'t see this often.' };
+const SHARKNADO_LEVEL=7, SHARKNADO_CHANCE=0.1;
 const sunCool=l=>22-2.5*l;              // seconds to reapply sunscreen at each level
 const protCool=l=>(15-1.5*l).toFixed(1).replace(/\.0$/,''), protR=l=>9+2*l;   // Protest flag: how often, how far
 const LUNCH_FOOD=['🥪','🍎','🧃','🍌','🥨','🧀'];
@@ -1263,7 +1272,7 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0, lunches:[], lunchT:2, sun:0, sunT:0, protT:3, protFlag:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0} };   // you start with the bailer
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0,sharknado:0} };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1674,6 +1683,29 @@ function stepSurv(dt){
   const sl=survLvl('sun');
   if(sl>0){ const cap=sl>=5?2:1;
     if(S.sun<cap){ S.sunT-=dt; if(S.sunT<=0){ S.sun++; S.sunT=sunCool(sl); cheer('Reapplied sunscreen 🧴','#fff1a8'); SFX.tick(); } } }
+  /* SHARKNADO: a funnel roams round the boat about 8 m out. Gunk within 13 m is
+     dragged in and spun, and shredded in the middle; every second a shark is
+     flung out at the biggest thing nearby (Octavia included) and chomps it. */
+  if(S.up.sharknado){
+    const N=S.nado||(S.nado={a:Math.random()*7, sharkT:1, sharks:[], x:boat.x, y:boat.y});
+    N.a+=0.45*dt; N.x=boat.x+Math.cos(N.a)*8*P; N.y=boat.y+Math.sin(N.a)*8*P;
+    for(const g of S.gunk){ if(g.dead || g.kind==='boss') continue;
+      const dx=N.x-g.x, dy=N.y-g.y, d=Math.hypot(dx,dy)||1;
+      if(d<13*P){ const pull=(1.5+4.5*(1-d/(13*P)))*P*dt;
+        g.x+=dx/d*pull - dy/d*pull*0.8; g.y+=dy/d*pull + dx/d*pull*0.8;          // in, and round
+        if(d<3.2*P) hitGunk(g,12*dt); } }
+    for(const o of S.spit) if(Math.hypot(o.x-N.x,o.y-N.y)<3.5*P) o.done=true;   // gloop gets sucked up too
+    N.sharkT-=dt;
+    if(N.sharkT<=0){ N.sharkT=1;
+      let best=null, bs=-1;
+      for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-N.x,g.y-N.y); if(d>24*P) continue;
+        const score=(g.kind==='boss'?100:g.max)-d/P*0.05; if(score>bs){ bs=score; best=g; } }
+      if(best) N.sharks.push({x0:N.x, y0:N.y, g:best, tx:best.x, ty:best.y, t:0, dur:0.6}); }
+    for(const k of N.sharks){ k.t+=dt; if(!k.g.dead){ k.tx=k.g.x; k.ty=k.g.y; }
+      if(k.t>=k.dur){ k.done=true; S.splashes.push({x:k.tx,y:k.ty,R:2.4*P,t:0});
+        for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-k.tx,g.y-k.ty)<(2.2+g.r)*P) hitGunk(g, g.kind==='boss'?7:14); } }   // Octavia's tougher
+    N.sharks=N.sharks.filter(k=>!k.done);
+  }
   /* PROTEST: fly the flag and, as in a real race, the gunk you protest has to
      take its penalty turns (one turn, a full 720 from level 3) before it can
      come after you again. Octavia doesn't recognise the rules. */
@@ -1765,6 +1797,8 @@ function openLevelUp(){
   S.xp-=S.need; S.level++; S.need=Math.round(4+S.level*3.5+Math.pow(S.level,1.5));
   const pool=SURV_UPGRADES.filter(u=>S.up[u.id]<SURV_MAX);
   const picks=[]; while(picks.length<3 && pool.length) picks.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  if(S.level>=SHARKNADO_LEVEL && !S.up.sharknado && Math.random()<SHARKNADO_CHANCE){
+    const i=Math.floor(Math.random()*Math.max(1,picks.length)); picks[i]=SHARKNADO; }
   if(!picks.length) return;
   survPick={opts:picks, sel:0, openedAt:performance.now()};
   renderLevelUp(); SFX.cheer(); rumble(0.3,0.5,160);
@@ -1774,8 +1808,8 @@ function renderLevelUp(){
   el.classList.remove('hidden');
   el.innerHTML=`<div id="luCard"><h1>Level ${SURV.level}!</h1><p class="sub">Pick an upgrade</p><div id="luOpts">`+
     survPick.opts.map((u,i)=>{ const l=SURV.up[u.id];
-      return `<button class="lu${i===survPick.sel?' sel':''}" data-i="${i}"><span class="ic">${u.icon}</span>`+
-             `<b>${u.name}</b><span class="lv">${'●'.repeat(l)}${'○'.repeat(SURV_MAX-l)}</span><span class="tx">${u.text(l)}</span></button>`; }).join('')+
+      return `<button class="lu${u.extreme?' extreme':''}${i===survPick.sel?' sel':''}" data-i="${i}"><span class="ic">${u.icon}</span>`+
+             `<b>${u.name}</b><span class="lv">${u.extreme?'★ EXTREME · RARE ★':'●'.repeat(l)+'○'.repeat(SURV_MAX-l)}</span><span class="tx">${u.text(l)}</span></button>`; }).join('')+
     `</div><p class="sub keys">${padInUse?'D-pad ◂ ▸ to choose, ✕ to take it':isTouch?'Tap one':'1 · 2 · 3, or ← → and Enter'}</p></div>`;
   el.querySelectorAll('.lu').forEach(b=>b.addEventListener('click',()=>{ if(pickReady()) takeUpgrade(+b.dataset.i); }));
 }
@@ -1786,7 +1820,8 @@ function takeUpgrade(i){
   if(u.id==='sun' && SURV.up.sun===1){ SURV.sun=1; SURV.sunT=sunCool(1); }
   survPick=null; document.getElementById('lvlup').classList.add('hidden');
   for(const kk in keys) keys[kk]=false;
-  cheer(u.name+'!','#ffd66b',true);
+  if(u.extreme){ cheer('🦈🌪️ SHARKNADO!','#e7c6ff',true); SFX.gun(); setTimeout(()=>SFX.surf(),150); rumble(1,1,700); }
+  else cheer(u.name+'!','#ffd66b',true);
   if(SURV.xp>=SURV.need) openLevelUp();
 }
 // for a moment after the picker opens, nothing counts: the controls you were
@@ -1916,8 +1951,37 @@ function drawSurv(cam){
     ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
   }
 }
+function drawSharknado(cam){
+  const S=SURV, N=S.nado; if(!N || !S.up.sharknado) return;
+  const P=TUNING.pxPerM, x=N.x-cam.x, y=N.y-cam.y, t=simTime;
+  ctx.save();
+  // a dark churn on the water at its foot
+  ctx.fillStyle='rgba(20,30,40,.25)'; ctx.beginPath(); ctx.ellipse(x,y,3.4*P,1.6*P,0,0,7); ctx.fill();
+  // the funnel: stacked, spinning rings that widen as they rise
+  const H=8*P;
+  for(let i=0;i<16;i++){ const f=i/15, yy=y-f*H, rx=(0.7+3.3*f)*P, ry=rx*0.32, wob=Math.sin(t*3+i)*0.3*P;
+    ctx.strokeStyle=`rgba(${120+60*f},${135+60*f},${150+60*f},${0.8-0.3*f})`; ctx.lineWidth=3+3*f; ctx.setLineDash([rx*0.9,rx*0.5]); ctx.lineDashOffset=-t*120*(1+f);
+    ctx.beginPath(); ctx.ellipse(x+wob,yy,rx,ry,0,0,7); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // sharks and debris going round in it
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff';
+  for(let i=0;i<5;i++){ const f=(i+0.5)/5, a=t*(3.2-f)+i*1.9, rx=(0.7+3.3*f)*P;
+    const sx=x+Math.cos(a)*rx, sy=y-f*H+Math.sin(a)*rx*0.32;
+    ctx.save(); ctx.translate(sx,sy); ctx.rotate(Math.sin(a)*0.6); ctx.scale(Math.cos(a)>0?1:-1,1);
+    ctx.font=Math.round(1.8*P)+'px sans-serif'; ctx.fillText('🦈',0,0); ctx.restore(); }
+  ctx.fillStyle='rgba(230,235,240,.8)';
+  for(let i=0;i<16;i++){ const f=((i*0.37+t*0.3)%1), a=t*4+i*2.3, rx=(0.7+3.3*f)*P;
+    ctx.beginPath(); ctx.arc(x+Math.cos(a)*rx, y-f*H+Math.sin(a)*rx*0.32, 1.8,0,7); ctx.fill(); }
+  // sharks in flight
+  ctx.fillStyle='#fff';
+  for(const k of N.sharks){ const u=Math.min(1,k.t/k.dur), gx=lerp(k.x0,k.tx,u)-cam.x, gy=lerp(k.y0,k.ty,u)-cam.y-Math.sin(Math.PI*u)*3*P;
+    ctx.save(); ctx.translate(gx,gy); const dir=Math.atan2(k.ty-k.y0,k.tx-k.x0); ctx.scale(Math.cos(dir)>=0?-1:1,1); ctx.rotate(-0.4+u*0.8);
+    ctx.font=Math.round(1.9*P)+'px sans-serif'; ctx.fillText('🦈',0,0); ctx.restore(); }
+  ctx.textBaseline='alphabetic'; ctx.restore();
+}
 function drawSurvOverlay(cam){
   const S=SURV;
+  drawSharknado(cam);
   drawWaves(cam);
   drawBossBar();
   if(S.invuln>0){ const bx=boat.x-cam.x, by=boat.y-cam.y, R=4*TUNING.pxPerM, f=S.invuln/SURV_INVULN;
