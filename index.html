@@ -2098,10 +2098,16 @@ function drawChester(cam){
 function drawIguana(sc,ph){
   ctx.save(); ctx.scale(sc,sc);
   const green='#5cb84a', dark='#357a2c', line='#1e3d1a', flail=Math.sin(ph*1.7);
-  // tail: long and tapering, whipping about
-  ctx.strokeStyle=dark; ctx.lineCap='round';
-  ctx.lineWidth=3.2; ctx.beginPath(); ctx.moveTo(-6,0); ctx.quadraticCurveTo(-12,4*flail,-18,-2*flail); ctx.stroke();
-  ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(-17,-1.6*flail); ctx.quadraticCurveTo(-21,-5*flail,-24,-1); ctx.stroke();
+  // tail: long, tapering and banded like a real iguana's, outlined so it
+  // stands out against the water, whipping about as it flies
+  const tail=t=>{ // a point along the tail, t 0 (base) to 1 (tip)
+    const x=-6-20*t, y=Math.sin(t*3.2)*4.5*flail - t*t*1.5*flail; return [x,y]; };
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(const pass of [0,1]){
+    for(let i=0;i<12;i++){ const t0=i/12, t1=(i+1)/12, [x0,y0]=tail(t0), [x1,y1]=tail(t1), w=4.6*(1-t0*0.8);
+      ctx.strokeStyle = pass ? (i%2 ? '#3f8f33' : '#7ccc5e') : line;          // light and dark bands
+      ctx.lineWidth = pass ? w : w+1.8;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); } }
   // legs splayed out, scrabbling at the air
   ctx.lineWidth=1.8;
   for(const [lx,side,ph2] of [[-3.5,1,0],[-3.5,-1,1.5],[3,1,2.5],[3,-1,4]]){ const k=Math.sin(ph*2.2+ph2)*0.6;
