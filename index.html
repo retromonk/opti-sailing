@@ -1258,6 +1258,11 @@ const SURV_UPGRADES = [
       l===0?`Chester the Russian Blue rides on the bow. Every ${chCool(1)} s he hisses and gunk within ${chR(1)} m flees for ${chFlee(1)} s`:
       l===2?`Chester's hiss comes with a swipe (5 damage) — reaches ${chR(l+1)} m, every ${chCool(l+1)} s`:
       `Hiss reaches ${chR(l+1)} m (was ${chR(l)}), gunk flees ${chFlee(l+1)} s (was ${chFlee(l)}), every ${chCool(l+1)} s (was ${chCool(l)})` },
+  { id:'iguana', name:'Hey, put that down!', icon:'🦎', text:l=>
+      l===0?`Someone grabs the iguana and hurls it. It flies straight through every gunk in its path (${igDmg(1)} each), every ${igCool(1)} s`:
+      l===2?`Two iguanas at once, fanned out — ${igDmg(l+1)} damage each, every ${igCool(l+1)} s`:
+      l===4?`Three iguanas, flying further — ${igDmg(l+1)} damage each, every ${igCool(l+1)} s`:
+      `Iguana hits for ${igDmg(l+1)} (was ${igDmg(l)}), thrown every ${igCool(l+1)} s (was ${igCool(l)})` },
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
@@ -1267,6 +1272,8 @@ const SHARKNADO={ id:'sharknado', name:'SHARKNADO', icon:'🦈🌪️', extreme:
   text:()=>'A tornado full of sharks circles your boat, sucking in gunk and flinging sharks at anything big. You won\'t see this often.' };
 const SHARKNADO_LEVEL=7, SHARKNADO_CHANCE=0.1;
 // Chester on board: how often he hisses, how far it reaches, how long gunk runs for
+// Hey, put that down!: iguana damage and how often one gets thrown
+const igDmg=l=>Math.round(3+1.5*l), igCool=l=>(3.3-0.3*l).toFixed(1).replace(/\.0$/,'');
 const chCool=l=>(14-1.5*l).toFixed(1).replace(/\.0$/,''), chR=l=>8+2*l, chFlee=l=>(2+0.5*l).toFixed(1).replace(/\.0$/,'');
 const sunCool=l=>22-2.5*l;              // seconds to reapply sunscreen at each level
 const protCool=l=>(15-1.5*l).toFixed(1).replace(/\.0$/,''), protR=l=>9+2*l;   // Protest flag: how often, how far
@@ -1278,7 +1285,7 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0, lunches:[], lunchT:2, sun:0, sunT:0, protT:3, protFlag:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0,sharknado:0,chester:0}, chesterT:4, hissT:0 };   // you start with the bailer
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0,sharknado:0,chester:0,iguana:0}, chesterT:4, hissT:0, iguanas:[], iguanaT:1.5, iguanaYells:0 };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1717,6 +1724,29 @@ function stepSurv(dt){
         for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-k.tx,g.y-k.ty)<(2.2+g.r)*P) hitGunk(g, g.kind==='boss'?7:14); } }   // Octavia's tougher
     N.sharks=N.sharks.filter(k=>!k.done);
   }
+  /* HEY, PUT THAT DOWN!: somebody grabs the iguana and hurls it at the nearest
+     gunk. It flies straight on through everything in its path, hitting each
+     one once; two at a time from level 3, three (flying further) at level 5. */
+  const il=survLvl('iguana');
+  if(il>0){
+    S.iguanaT-=dt;
+    if(S.iguanaT<=0){
+      let near=null, nd=26*P;
+      for(const g of S.gunk){ if(g.dead) continue; const d=Math.hypot(g.x-boat.x,g.y-boat.y); if(d<nd){ nd=d; near=g; } }
+      if(near){
+        S.iguanaT=+igCool(il);
+        const n=il>=5?3:il>=3?2:1, a0=Math.atan2(near.y-boat.y,near.x-boat.x), sp=15*P, life=il>=5?1.9:1.4;
+        for(let i=0;i<n;i++){ const a=a0+(n>1?(i/(n-1)-0.5)*0.5:0);
+          S.iguanas.push({x:boat.x,y:boat.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,t:0,life,hit:new Set(),spin:Math.random()*7}); }
+        if(S.iguanaYells<3 || Math.random()<0.2){ S.iguanaYells++; cheer('Hey, put that down! 🦎','#9be07a',true); }
+        SFX.pew();
+      } else S.iguanaT=0.5;
+    }
+  }
+  for(const q of S.iguanas){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.spin+=dt*9;
+    for(const g of S.gunk){ if(g.dead || q.hit.has(g)) continue;
+      if(Math.hypot(g.x-q.x,g.y-q.y)<(g.r+0.9)*P){ q.hit.add(g); hitGunk(g, igDmg(il)); } } }
+  S.iguanas=S.iguanas.filter(q=>q.t<q.life);
   /* CHESTER ON BOARD: the ship's cat, a Russian Blue, rides on the bow. Every
      so often he arches his back and hisses, and nearby gunk turns tail and
      flees for a few seconds (from level 3 the hiss comes with a swipe).
@@ -2063,8 +2093,47 @@ function drawChester(cam){
   if(h>0){ ctx.save(); ctx.globalAlpha=h; ctx.font='700 13px Fredoka,sans-serif'; ctx.textAlign='center';
     ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.85)'; ctx.strokeText('HSSS!',bx+face*26,by-16); ctx.fillStyle='#dfe8f5'; ctx.fillText('HSSS!',bx+face*26,by-16); ctx.restore(); }
 }
+/* a cartoon green iguana, head along +x, drawn our own way so it points the
+   way it flies on every device (emoji lizards face different ways on each) */
+function drawIguana(sc,ph){
+  ctx.save(); ctx.scale(sc,sc);
+  const green='#5cb84a', dark='#357a2c', line='#1e3d1a', flail=Math.sin(ph*1.7);
+  // tail: long and tapering, whipping about
+  ctx.strokeStyle=dark; ctx.lineCap='round';
+  ctx.lineWidth=3.2; ctx.beginPath(); ctx.moveTo(-6,0); ctx.quadraticCurveTo(-12,4*flail,-18,-2*flail); ctx.stroke();
+  ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(-17,-1.6*flail); ctx.quadraticCurveTo(-21,-5*flail,-24,-1); ctx.stroke();
+  // legs splayed out, scrabbling at the air
+  ctx.lineWidth=1.8;
+  for(const [lx,side,ph2] of [[-3.5,1,0],[-3.5,-1,1.5],[3,1,2.5],[3,-1,4]]){ const k=Math.sin(ph*2.2+ph2)*0.6;
+    ctx.beginPath(); ctx.moveTo(lx,side*2); ctx.lineTo(lx+2.5*Math.cos(k+side*1.2)*side*0+Math.sin(k)*2.5,side*(5.5+Math.cos(k))); ctx.stroke(); }
+  // body
+  ctx.fillStyle=green; ctx.strokeStyle=line; ctx.lineWidth=0.9;
+  ctx.beginPath(); ctx.ellipse(-0.5,0,7.2,3.2,0,0,7); ctx.fill(); ctx.stroke();
+  // spiky crest along the back
+  ctx.fillStyle='#8fd66f';
+  for(let i=-5;i<=4;i+=1.8){ ctx.beginPath(); ctx.moveTo(i-0.8,-2.8); ctx.lineTo(i,-4.6); ctx.lineTo(i+0.8,-2.8); ctx.closePath(); ctx.fill(); }
+  // head, with a dewlap under the chin
+  ctx.fillStyle=green; ctx.beginPath(); ctx.ellipse(8,-0.3,3.4,2.4,0.1,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#e0c05a'; ctx.beginPath(); ctx.ellipse(7,2.1,1.6,1.2,0,0,7); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(8.8,-1,1.05,0,7); ctx.fill();           // a wide, alarmed eye
+  ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(9.1,-1,0.5,0,7); ctx.fill();
+  ctx.restore();
+}
+function drawIguanas(cam){
+  const S=SURV; if(!S.iguanas || !S.iguanas.length) return;
+  const P=TUNING.pxPerM;
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff';
+  for(const q of S.iguanas){ const x=q.x-cam.x, y=q.y-cam.y, a=Math.atan2(q.vy,q.vx), fade=Math.min(1,(q.life-q.t)/0.25);
+    ctx.globalAlpha=fade*0.35; ctx.strokeStyle='#bff0a0'; ctx.lineWidth=3; ctx.lineCap='round';           // a streak behind it
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-Math.cos(a)*1.8*P,y-Math.sin(a)*1.8*P); ctx.stroke();
+    ctx.globalAlpha=fade; ctx.save(); ctx.translate(x,y); ctx.rotate(a+Math.sin(q.spin)*0.25);
+    if(Math.cos(a)<0) ctx.scale(1,-1);                 // keep its back up whichever way it flies
+    drawIguana(0.95*P/10, q.spin); ctx.restore(); }
+  ctx.restore();
+}
 function drawSurvOverlay(cam){
   const S=SURV;
+  drawIguanas(cam);
   drawChester(cam);
   drawSharknado(cam);
   drawWaves(cam);
