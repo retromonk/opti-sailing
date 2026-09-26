@@ -1254,6 +1254,10 @@ const SURV_UPGRADES = [
       l===0?`Fly the protest flag every ${protCool(1)} s: gunk within ${protR(1)} m must do a penalty turn before chasing you again`:
       l===2?`Gunk must now do a full 720 — two turns — and the flag flies every ${protCool(l+1)} s`:
       `Protest reaches ${protR(l+1)} m (was ${protR(l)}) and flies every ${protCool(l+1)} s (was ${protCool(l)})` },
+  { id:'chester',name:'Chester on board',icon:'🐈', text:l=>
+      l===0?`Chester the Russian Blue rides on the bow. Every ${chCool(1)} s he hisses and gunk within ${chR(1)} m flees for ${chFlee(1)} s`:
+      l===2?`Chester's hiss comes with a swipe (5 damage) — reaches ${chR(l+1)} m, every ${chCool(l+1)} s`:
+      `Hiss reaches ${chR(l+1)} m (was ${chR(l)}), gunk flees ${chFlee(l+1)} s (was ${chFlee(l)}), every ${chCool(l+1)} s (was ${chCool(l)})` },
   { id:'lob',    name:'Sponge lob',     icon:'🧽', text:l=>l===0?'Lobs a sponge into the thickest gunk — the wind bends its flight':'Bigger splash, more often' }
 ];
 const SURV_MAX = 5;
@@ -1262,6 +1266,8 @@ const SURV_MAX = 5;
 const SHARKNADO={ id:'sharknado', name:'SHARKNADO', icon:'🦈🌪️', extreme:true, max:1,
   text:()=>'A tornado full of sharks circles your boat, sucking in gunk and flinging sharks at anything big. You won\'t see this often.' };
 const SHARKNADO_LEVEL=7, SHARKNADO_CHANCE=0.1;
+// Chester on board: how often he hisses, how far it reaches, how long gunk runs for
+const chCool=l=>(14-1.5*l).toFixed(1).replace(/\.0$/,''), chR=l=>8+2*l, chFlee=l=>(2+0.5*l).toFixed(1).replace(/\.0$/,'');
 const sunCool=l=>22-2.5*l;              // seconds to reapply sunscreen at each level
 const protCool=l=>(15-1.5*l).toFixed(1).replace(/\.0$/,''), protR=l=>9+2*l;   // Protest flag: how often, how far
 const LUNCH_FOOD=['🥪','🍎','🧃','🍌','🥨','🧀'];
@@ -1272,7 +1278,7 @@ function seedSurv(){
   SURV = { t:0, gunk:[], gems:[], shots:[], rings:[], cleared:0, level:1, xp:0, need:4,
            hp:5, maxHp:5, invuln:0, spawnAcc:0, squirtT:0, prevSide:0, over:false,
            spit:[], lobs:[], splashes:[], sprayT:0, lobT:0, lunches:[], lunchT:2, sun:0, sunT:0, protT:3, protFlag:0,
-           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0,sharknado:0} };   // you start with the bailer
+           up:{wake:0,trail:0,boom:0,squirt:1,fender:0,magnet:0,hull:0,bottom:0,spray:0,lob:0,ties:0,rudder:0,lunch:0,sun:0,protest:0,sharknado:0,chester:0}, chesterT:4, hissT:0 };   // you start with the bailer
   survPick=null;
 }
 const survLvl = id => SURV ? SURV.up[id] : 0;
@@ -1547,6 +1553,11 @@ function stepSurv(dt){
       g.wob+=dt*3; g.flash=Math.max(0,g.flash-dt); g.fenderHit=Math.max(0,g.fenderHit-dt);
       if(g.pen.left<=0) g.pen=null;
       continue; }
+    if(g.flee>0){                                // scared of the cat: run the other way
+      g.flee-=dt; const dx=g.x-boat.x, dy=g.y-boat.y, dd=Math.hypot(dx,dy)||1, s=base*g.spd*1.4;
+      g.x+=(dx/dd*s + dw.x*0.55)*k*dt; g.y+=(dy/dd*s + dw.y*0.55)*k*dt;
+      g.wob+=dt*6; g.flash=Math.max(0,g.flash-dt); g.fenderHit=Math.max(0,g.fenderHit-dt);
+      continue; }
     // a lunch in the water is more tempting than you are
     let tx=boat.x, ty=boat.y;
     for(const l of S.lunches){ if(Math.hypot(l.x-g.x,l.y-g.y)<14*P){ tx=l.x; ty=l.y; break; } }
@@ -1706,6 +1717,23 @@ function stepSurv(dt){
         for(const g of S.gunk) if(!g.dead && Math.hypot(g.x-k.tx,g.y-k.ty)<(2.2+g.r)*P) hitGunk(g, g.kind==='boss'?7:14); } }   // Octavia's tougher
     N.sharks=N.sharks.filter(k=>!k.done);
   }
+  /* CHESTER ON BOARD: the ship's cat, a Russian Blue, rides on the bow. Every
+     so often he arches his back and hisses, and nearby gunk turns tail and
+     flees for a few seconds (from level 3 the hiss comes with a swipe).
+     Octavia is not scared of cats. */
+  const cl=survLvl('chester');
+  S.hissT=Math.max(0,S.hissT-dt);
+  if(cl>0){
+    S.chesterT-=dt;
+    if(S.chesterT<=0){
+      S.chesterT=+chCool(cl); S.hissT=1.1;
+      const R=chR(cl)*P, dur=+chFlee(cl); let n=0;
+      for(const g of S.gunk){ if(g.dead || g.kind==='boss') continue;
+        if(Math.hypot(g.x-boat.x,g.y-boat.y)<R+g.r*P){ g.flee=dur; g.pen=null; n++; if(cl>=3) hitGunk(g,5); } }
+      S.rings.push({x:boat.x,y:boat.y,R,t:0});
+      cheer(n?`Chester: HSSSS! 🐈 ${n} fled`:'Chester: hsss 🐈','#b9c9e0',true); SFX.hiss();
+    }
+  }
   /* PROTEST: fly the flag and, as in a real race, the gunk you protest has to
      take its penalty turns (one turn, a full 720 from level 3) before it can
      come after you again. Octavia doesn't recognise the rules. */
@@ -1751,7 +1779,7 @@ function stepSurv(dt){
 
   // SPITTERS lob gloop at you — slow, wind-borne, and a tack swats it away
   for(const g of S.gunk){
-    if(g.dead || g.kind!=='spit' || g.pen) continue;
+    if(g.dead || g.kind!=='spit' || g.pen || g.flee>0) continue;
     g.fireT-=dt;
     const d=Math.hypot(boat.x-g.x,boat.y-g.y);
     if(g.fireT<=0 && d<24*P){
@@ -1894,6 +1922,9 @@ function drawSurv(cam){
     ctx.closePath();
     ctx.fillStyle = g.flash>0 ? '#fffaf0' : g.kind==='big' ? '#6a3f7a' : g.kind==='spit' ? '#8a4f9e' : g.kind==='mid' ? '#5b6e2e' : '#6f8f3a';
     ctx.fill(); ctx.strokeStyle='rgba(16,51,63,.8)'; ctx.lineWidth=2; ctx.stroke();
+    if(g.flee>0){   // a scared "!" over anything running from the cat
+      ctx.font='700 14px Fredoka,sans-serif'; ctx.textAlign='center'; ctx.lineWidth=3; ctx.strokeStyle='rgba(16,51,63,.8)';
+      ctx.strokeText('!',x,y-R-6); ctx.fillStyle='#ffe066'; ctx.fillText('!',x,y-R-6); }
     if(g.pen){   // a circling arrow and the penalty it owes
       ctx.save(); ctx.strokeStyle='rgba(255,138,122,.9)'; ctx.lineWidth=2.5; const a=simTime*4*g.pen.sgn;
       ctx.beginPath(); ctx.arc(x,y,R+6,a,a+Math.PI*1.4*g.pen.sgn,g.pen.sgn<0); ctx.stroke();
@@ -1979,8 +2010,41 @@ function drawSharknado(cam){
     ctx.font=Math.round(1.9*P)+'px sans-serif'; ctx.fillText('🦈',0,0); ctx.restore(); }
   ctx.textBaseline='alphabetic'; ctx.restore();
 }
+/* Chester: a grey-blue cat with green eyes sitting up on the foredeck.
+   When he hisses his back arches, his fur puffs up and his mouth opens. */
+function drawChester(cam){
+  const S=SURV; if(!survLvl('chester') || boat.capsized) return;
+  const P=TUNING.pxPerM, u=vecOf(boat.hdg), bx=boat.x+u.x*1.4*P-cam.x, by=boat.y+u.y*1.4*P-cam.y;
+  const h=S.hissT>0 ? Math.min(1,S.hissT/0.3,(1.1-S.hissT+0.05)/0.15) : 0;     // how puffed up he is
+  const sc=1.15*P/10*(1+0.25*h), blue='#7f93ad', dark='#5d6f88';
+  ctx.save(); ctx.translate(bx,by-2); ctx.scale(sc,sc);
+  // tail, puffed when he hisses
+  ctx.strokeStyle=dark; ctx.lineCap='round'; ctx.lineWidth=4+4*h;
+  ctx.beginPath(); ctx.moveTo(6,8); ctx.quadraticCurveTo(16,8-6*h,14,-4-8*h+Math.sin(simTime*3)*2*(1-h)); ctx.stroke();
+  // body, arched when hissing
+  ctx.fillStyle=blue; ctx.strokeStyle='#26384a'; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.ellipse(0,6-3*h,9,7+2*h,0,0,7); ctx.fill(); ctx.stroke();
+  // head
+  ctx.beginPath(); ctx.arc(0,-6-2*h,7.5,0,7); ctx.fill(); ctx.stroke();
+  // ears
+  for(const sgn of [-1,1]){ ctx.beginPath(); ctx.moveTo(sgn*3,-12-2*h); ctx.lineTo(sgn*7.5,-17-3*h); ctx.lineTo(sgn*7.2,-8-2*h); ctx.closePath();
+    ctx.fillStyle=blue; ctx.fill(); ctx.stroke(); ctx.fillStyle='#e8a9b8'; ctx.beginPath(); ctx.moveTo(sgn*4.2,-11.5-2*h); ctx.lineTo(sgn*6.8,-15-3*h); ctx.lineTo(sgn*6.6,-9.5-2*h); ctx.closePath(); ctx.fill(); }
+  // big green eyes (narrowed when he hisses)
+  for(const sgn of [-1,1]){ ctx.fillStyle='#8fd14f'; ctx.beginPath(); ctx.ellipse(sgn*2.8,-7-2*h,1.9,h?0.9:1.9,0,0,7); ctx.fill();
+    ctx.fillStyle='#1b2a1b'; ctx.beginPath(); ctx.ellipse(sgn*2.8,-7-2*h,0.55,h?0.8:1.6,0,0,7); ctx.fill(); }
+  // nose and mouth
+  ctx.fillStyle='#e8a9b8'; ctx.beginPath(); ctx.arc(0,-4.3-2*h,0.9,0,7); ctx.fill();
+  if(h>0){ ctx.fillStyle='#5a2230'; ctx.beginPath(); ctx.ellipse(0,-2.3-2*h,1.8,1.4*h+0.3,0,0,7); ctx.fill(); }
+  // whiskers
+  ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=0.6;
+  for(const sgn of [-1,1]) for(const dy of [-0.8,0.6]){ ctx.beginPath(); ctx.moveTo(sgn*3.5,-4-2*h+dy); ctx.lineTo(sgn*(10+2*h),-4.5-2*h+dy*2.2); ctx.stroke(); }
+  ctx.restore();
+  if(h>0){ ctx.save(); ctx.globalAlpha=h; ctx.font='700 15px Fredoka,sans-serif'; ctx.textAlign='center';
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(16,51,63,.85)'; ctx.strokeText('HSSS!',bx+52,by-6); ctx.fillStyle='#dfe8f5'; ctx.fillText('HSSS!',bx+52,by-6); ctx.restore(); }
+}
 function drawSurvOverlay(cam){
   const S=SURV;
+  drawChester(cam);
   drawSharknado(cam);
   drawWaves(cam);
   drawBossBar();
@@ -2195,6 +2259,8 @@ const SFX=(()=>{
       tone(523,0.12,'triangle',0.15); setTimeout(()=>tone(659,0.12,'triangle',0.15),90); setTimeout(()=>tone(784,0.22,'triangle',0.15),180); },
     streak(m){ if(chipSound) return arp(m>=2?[784,988,1175,1568]:[659,784,988,1319],0.045,0.1);
       tone(m>=2?988:784,0.25,'sine',0.14,200); },
+    // Chester's hiss: a sharp breathy burst
+    hiss(){ noise(0.5,0.28,7000); setTimeout(()=>noise(0.25,0.18,5000),120); },
     // a fish landing in the boat: a wet slap and a couple of flops
     flop(){ noise(0.12,0.3,1500); [0,110,210].forEach((d,i)=>setTimeout(()=>tone(chipSound?660+i*220:300-i*40,0.07,chipSound?'square':'triangle',0.12,chipSound?300:-120),120+d)); },
     /* BOSS MUSIC: a driving A-minor loop, scheduled a little ahead of time.
